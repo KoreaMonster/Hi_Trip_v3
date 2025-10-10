@@ -6,12 +6,13 @@ from .models import User, Traveler
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
     """직원 관리자 페이지"""
-    list_display = ['username', 'email', 'phone', 'is_staff', 'date_joined']
-    list_filter = ['is_staff', 'is_active', 'date_joined']
+    list_display = ['username', 'email', 'phone', 'role', 'is_approved', 'is_staff', 'date_joined']
+    list_filter = ['role', 'is_approved', 'is_staff', 'is_active', 'date_joined']
     search_fields = ['username', 'email', 'phone']
 
     fieldsets = BaseUserAdmin.fieldsets + (
-        ('추가 정보', {'fields': ('phone',)}),
+        ('추가 정보', {'fields': ('phone', 'first_name_kr', 'last_name_kr')}),
+        ('권한 설정', {'fields': ('role', 'is_approved')}),
     )
 
 

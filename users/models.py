@@ -9,17 +9,33 @@ class User(AbstractUser):
     # AbstractUser에 포함된 기본 필드를 영문 이름으로 사용합니다.
     # first_name (영문 이름), last_name (영문 성)
     """
+    ROLE_CHOICES = [
+        ('super_admin', '총괄담당자'),
+        ('manager', '담당자'),
+    ]
     first_name_kr = models.CharField(max_length=10, blank=True, verbose_name='한글 이름')
     last_name_kr = models.CharField(max_length=10, blank=True, verbose_name='한글 성')
 
     phone = models.CharField(max_length=20, blank=True, verbose_name='연락처')
+
+    role = models.CharField(
+        max_length=20,
+        choices=ROLE_CHOICES,
+        default='manager',
+        verbose_name='직급'
+    )
+    is_approved = models.BooleanField(
+        default=False,
+        verbose_name='승인 여부',
+        help_text='총괄담당자가 승인한 직원만 시스템 사용 가능'
+    )
 
     class Meta:
         verbose_name = '직원'
         verbose_name_plural = '직원 목록'
 
     def __str__(self):
-        return self.username
+        return f"{self.username} ({self.get_role_display()})"
 
 
 class Traveler(models.Model):

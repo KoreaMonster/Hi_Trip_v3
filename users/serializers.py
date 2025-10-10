@@ -7,14 +7,17 @@ class UserSerialization(serializers.ModelSerializer):
     """직원 회원가입 및 정보 직렬화"""
     password = serializers.CharField(write_only=True, min_length=8)
     #보안 설정 -> 서버가 사용자에게 응답 보낼 때, 비밀번호를 포함하지 않도록
+    role_display = serializers.CharField(source='get_role_display', read_only=True)
+    # 사용자에게 '총괄담당자', '담당자' 같은 한글로 보여주기 위함
 
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'password', 'phone',
-                  'first_name', 'last_name', 'first_name_kr', 'last_name_kr',]
+                  'first_name', 'last_name', 'first_name_kr', 'last_name_kr',
+                  'role', 'role_display', 'is_approved',]
 
 
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'role_display', 'is_approved']
 
     def create(self, validated_data):
         user = User.objects.create_user(
