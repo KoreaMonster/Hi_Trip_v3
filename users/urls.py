@@ -9,3 +9,18 @@ urlpatterns = [
     # 예시: 나중에 회원가입 URL을 만든다면 아래와 같이 추가할 수 있습니다.
     # path('signup/', views.SignupView.as_view(), name='signup'),
 ]
+
+# # test_v1을 위해 생성함.
+# # users/urls.py
+#
+# from django.urls import path
+# from . import views  # views.py 파일을 가져옵니다.
+#
+# urlpatterns = [
+#     # 각 기능(view)에 맞는 URL 경로를 지정합니다.
+#     path('register/', views.register, name='register'),      # 회원가입
+#     path('login/', views.login_view, name='login'),          # 로그인
+#     path('logout/', views.logout_view, name='logout'),        # 로그아웃
+#     path('profile/', views.profile, name='profile'),          # 프로필 조회
+# ]
+# # test_v1을 위해 생성함.

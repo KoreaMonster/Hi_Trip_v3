@@ -79,7 +79,7 @@ class Traveler(models.Model):
         ordering = ['last_name_kr', 'first_name_kr'] # 3. 정렬 기준 변경
 
     def __str__(self):
-        return f"{self.name} ({self.phone})"
+        return f"{self.full_name_kr} ({self.phone})"
 
     @property
     def full_name_kr(self): # 5. 한글 전체 이름을 위한 프로퍼티 추가
