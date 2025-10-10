@@ -67,6 +67,11 @@ class Traveler(models.Model):
     # 메타 정보
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    #
+    # #어떤 여행에 포함되었는지 (Day 4: Trip 모델 먼저 생성 후 들어가야할 속성)
+    # trip = models.ForeignKey('trips.Trip', on_delete=models.CASCADE, related_name='travelers')
+
+
 
     class Meta:
         verbose_name = '여행자'
