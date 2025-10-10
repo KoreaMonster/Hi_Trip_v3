@@ -117,6 +117,7 @@ def login_view(request):
 
 
 @extend_schema(
+    request=None,  # 이 API는 요청 본문(body)이 없다고 명시적으로 알려줍니다.
     responses={200: {'type': 'object', 'properties': {'message': {'type': 'string'}}}},
     description="로그아웃 (Session 종료)"
 )
