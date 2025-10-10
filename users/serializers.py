@@ -23,7 +23,7 @@ class UserSerialization(serializers.ModelSerializer):
             password=validated_data['password'],
             phone=validated_data.get('phone', ''),
             first_name=validated_data.get('first_name', ''),
-            last_name=validated_data.get('last_name', '')
+            last_name=validated_data.get('last_name', ''),
             first_name_kr = validated_data.get('first_name_kr', ''),
             last_name_kr = validated_data.get('last_name_kr', '')
         )
