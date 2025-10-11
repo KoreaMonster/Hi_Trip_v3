@@ -6,14 +6,18 @@ from .models import User, Traveler
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
     """직원 관리자 페이지"""
-    list_display = ['username', 'email', 'phone', 'role', 'is_approved', 'is_staff', 'date_joined']
-    list_filter = ['role', 'is_approved', 'is_staff', 'is_active', 'date_joined']
-    search_fields = ['username', 'email', 'phone']
+
+    list_display = ['username', 'full_name_kr_display', 'email', 'phone', 'role', 'is_approved']
+    list_filter = ['role', 'is_approved', 'is_staff', 'is_active']
+    search_fields = ['username', 'first_name_kr', 'last_name_kr', 'email', 'phone']
 
     fieldsets = BaseUserAdmin.fieldsets + (
         ('추가 정보', {'fields': ('phone', 'first_name_kr', 'last_name_kr')}),
         ('권한 설정', {'fields': ('role', 'is_approved')}),
     )
+    @admin.display(description='이름') # 관리자 페이지에 표시될 컬럼명 설정
+    def full_name_kr_display(self, obj):
+        return obj.full_name_kr
 
 
 @admin.register(Traveler)
@@ -52,9 +56,12 @@ class TravelerAdmin(admin.ModelAdmin):
         }),
     )
 
-    def payment_complete(self, obj):
-        """결제 완료 여부 표시"""
+    # def payment_complete(self, obj):
+    #     """결제 완료 여부 표시"""
+    #     return obj.payment_status
+    #
+    # payment_complete.boolean = True
+    # payment_complete.short_description = '결제 완료'
+    @admin.display(boolean=True, description='결제 완료')
+    def payment_status(self, obj):
         return obj.payment_status
-
-    payment_complete.boolean = True
-    payment_complete.short_description = '결제 완료'

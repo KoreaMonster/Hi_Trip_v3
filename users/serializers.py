@@ -14,12 +14,15 @@ class UserSerialization(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'password', 'phone',
-                  'first_name', 'last_name', 'first_name_kr', 'last_name_kr',
-                  'role', 'role_display', 'is_approved',]
+        fields = [
+            'id', 'username', 'email', 'password', 'phone',
+            'first_name', 'last_name',  # 영문 분리
+            'first_name_kr', 'last_name_kr',  # 한글 분리
+            'full_name_kr', 'full_name_en',  # 전체 이름 (추가)
+            'role', 'role_display', 'is_approved',
+        ]
 
-
-        read_only_fields = ['id', 'role_display', 'is_approved']
+        read_only_fields = ['id', 'role_display', 'is_approved', 'full_name_kr', 'full_name_en']
 
     def create(self, validated_data):
         user = User.objects.create_user(

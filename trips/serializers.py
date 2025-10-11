@@ -41,8 +41,7 @@ class TripSerializer(serializers.ModelSerializer):
         """
         if obj.manager:
             #담당자가 있으면
-            return f"{obj.manager.last_name_kr}{obj.manager.first_name_kr}" \
-                if obj.manager.last_name_kr else obj.manager.username
+            return obj.manager.full_name_kr
         return None  # 담당자 없으면 None
 
     def validate(self,data):
@@ -60,3 +59,36 @@ class TripSerializer(serializers.ModelSerializer):
                     "종료일은 시작일보다 빠를 수 없습니다."
                 )
         return data
+
+
+class TripParticipantSerializer(serializers.ModelSerializer):
+    """
+    여행 참가자 정보 직렬화
+    """
+    # Traveler 정보를 중첩(nested)해서 표시
+    travler = TravelerSerializer(read_only=True)
+
+    # 또는 ID만 받을 때 (참가 등록 시)
+    travler_id = serializers.IntegerField(write_only=True, required=True)
+
+    class Meta:
+        model = TripParticipant
+        fields = [
+            'id',
+            'trip',
+            'traveler',      # 읽기용 (전체 정보)
+            'traveler_id',   # 쓰기용 (ID만)
+            'joined_date',
+        ]
+        read_only_fields = ['id', 'joined_date']
+
+class TripDetailSerializer(TripSerializer):
+    """
+    여행 상세 정보 직렬화 (참가자 목록 포함)
+    """
+    # 이 여행의 모든 참가자 표시
+    participants = TripParticipantSerializer(many=True, read_only=True)
+
+    class Meta:
+        # 부모 클래스의 fields에 participants 추가
+        fields = TripSerializer.Meta.fields + ['participants']

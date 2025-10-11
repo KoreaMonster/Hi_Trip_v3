@@ -1,8 +1,34 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
+class FullNameMixin(models.Model):
+    """
+    한글/영문 전체 이름을 제공하는 기능을 재사용하기 위한 믹스인.
+    이 모델은 실제 데이터베이스 테이블로 생성되지 않습니다.
+    """
+    class Meta:
+        abstract = True # 이 모델을 추상 모델로 설정
 
-class User(AbstractUser):
+    @property
+    def full_name_kr(self):
+        """한글 전체 이름을 반환합니다."""
+        # self.last_name_kr, self.first_name_kr 필드가 존재한다고 가정
+        if getattr(self, 'last_name_kr', None) and getattr(self, 'first_name_kr', None):
+            return f"{self.last_name_kr}{self.first_name_kr}"
+        # User 모델처럼 username이 있는 경우를 위한 대비
+        return getattr(self, 'username', '')
+
+    @property
+    def full_name_en(self):
+        """영문 전체 이름을 반환합니다."""
+        # User(first_name, last_name)와 Traveler(first_name_en, last_name_en)의
+        # 필드 이름이 다른 경우를 모두 처리합니다.
+        first = getattr(self, 'first_name', '') or getattr(self, 'first_name_en', '')
+        last = getattr(self, 'last_name', '') or getattr(self, 'last_name_en', '')
+        return f"{first} {last}".strip()
+
+
+class User(FullNameMixin, AbstractUser):
     """
     여행사 직원 전용 모델
 
@@ -38,7 +64,7 @@ class User(AbstractUser):
         return f"{self.username} ({self.get_role_display()})"
 
 
-class Traveler(models.Model):
+class Traveler(FullNameMixin, models.Model):
     """여행 참가 고객 정보 (로그인 불필요)"""
     GENDER_CHOICES = [
         ('M', '남'),
@@ -46,8 +72,8 @@ class Traveler(models.Model):
     ]
 
     # 기본 정보
-    last_name_kr = models.CharField(max_length=20, verbose_name='한글 성')  # 2. '성' 필드 추가
-    first_name_kr = models.CharField(max_length=30, verbose_name='한글 이름')
+    last_name_kr = models.CharField(max_length=10, verbose_name='한글 성')  # 2. '성' 필드 추가
+    first_name_kr = models.CharField(max_length=10, verbose_name='한글 이름')
     first_name_en = models.CharField(max_length=50, blank=True, verbose_name='영문 First Name')
     last_name_en = models.CharField(max_length=50, blank=True, verbose_name='영문 Last Name')
     birth_date = models.DateField(verbose_name='생년월일')
@@ -96,16 +122,6 @@ class Traveler(models.Model):
 
     def __str__(self):
         return f"{self.full_name_kr} ({self.phone})"
-
-    @property
-    def full_name_kr(self): # 5. 한글 전체 이름을 위한 프로퍼티 추가
-        """한글 전체 이름"""
-        return f"{self.last_name_kr}{self.first_name_kr}"
-
-    @property
-    def full_name_en(self):
-        """영문 전체 이름"""
-        return f"{self.first_name_en} {self.last_name_en}".strip()
 
     @property
     def payment_status(self):
