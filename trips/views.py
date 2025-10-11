@@ -251,7 +251,7 @@ def assign_manager(request, trip_id):
     #총괄 관리자만 사용 가능하도록
     if request.user.role != 'super_admin':
         return Response(
-            {'error':'총괄관리자만 담당자를 배경할 수 있습니다.'},
+            {'error': '총괄담당자만 담당자를 배정할 수 있습니다.'},
             status=status.HTTP_403_FORBIDDEN
         )
 
