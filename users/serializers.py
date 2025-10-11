@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 
+from users.models import Traveler
+
 User = get_user_model()
 
 class UserSerialization(serializers.ModelSerializer):
@@ -37,3 +39,22 @@ class LoginSerializer(serializers.Serializer):
     """로그인 요청 검증"""
     username = serializers.CharField()
     password = serializers.CharField(write_only=True)
+
+
+class TravelerSerializer(serializers.ModelSerializer):
+    """
+    여행자 정보 직렬화
+    TripParticipant에서 참가자 정보 표시용
+    """
+
+    class Meta:
+        model = Traveler
+        fields = [
+            'id',
+            'full_name_kr',  # property 필드
+            'phone',
+            'email',
+            'birth_date',
+            'gender'
+        ]
+        read_only_fields = ['id', 'full_name_kr']

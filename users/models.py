@@ -54,7 +54,7 @@ class Traveler(models.Model):
     gender = models.CharField(max_length=1, choices=GENDER_CHOICES, verbose_name='성별')
 
     # 연락 정보
-    phone = models.CharField(max_length=20, verbose_name='연락처')
+    phone = models.CharField(max_length=20, unique=True, verbose_name='연락처')
     email = models.EmailField(blank=True, verbose_name='이메일')
     address = models.TextField(blank=True, verbose_name='주소')
     country = models.CharField(max_length=50, default='대한민국', verbose_name='국가')
