@@ -299,3 +299,164 @@ class PlaceSerializer(serializers.ModelSerializer):
 
         return super().update(instance, validated_data)
 
+class CoordinatorRoleSerializer(serializers.ModelSerializer):
+    """
+    담당자 역할 직렬화
+    """
+    class Meta:
+        model = CoordinatorRole
+        fields = [
+            'id',
+            'name',
+            'description',
+            'created_at'
+        ]
+        read_only_fields = [
+            'id',
+            'created_at'
+        ]
+
+
+class PlaceCoordinatorSerializer(serializers.ModelSerializer):
+    """
+    장소 담당자 직렬화
+
+    - 읽기: 역할(role) 정보를 중첩해서 표시
+    - 쓰기: 역할 ID(role_id), 장소 ID(place_id)를 받아 처리
+    """
+    #읽기 전용 중첩
+    role = CoordinatorRoleSerializer(read_only=True)
+    
+    #쓰기 전용 Field
+    role_id = serializers.IntegerField(
+        write_only=True,
+        required=True,
+        help_text="담당자 역할 ID"
+    )
+    place_id = serializers.IntegerField(
+        write_only=True,
+        required=True,
+        help_text="담당 장소 ID"
+    )
+    class Meta:
+        model = PlaceCoordinator
+        fields = [
+            # 기본 필드
+            'id',
+            'place',        # ForeignKey 필드 (읽기 시 ID 반환)
+            'place_id',     # 쓰기용
+            'role',         # 읽기용 (중첩 객체)
+            'role_id',      # 쓰기용
+            'name',
+            'phone',
+            'note',
+
+            # 메타 정보
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = [
+            'id',
+            'created_at',
+            'updated_at',
+        ]
+
+    def validate_role_id(self, value):
+        # 역할 ID가 실제로 존재하는지 검증
+
+        if not CoordinatorRole.objects.filter(id=value).exists():
+            raise serializers.ValidationError("존재하지 않는 역할 ID입니다.")
+        return value
+
+    def validate_place_id(self, value):
+        #장소 ID가 실제로 존재하는지 검증
+        if not Place.objects.filter(id=value).exists():
+            raise serializers.ValidationError("존재하지 않는 장소 ID입니다.")
+        return value
+
+    def create(self, validated_data):
+        #생성 시 role_id와 place_id를 실제 객체로 변환하여 저장
+        #validated_data에는 role_id, place_id가 포함됨
+
+        return PlaceCoordinator.objects.create(**validated_data)
+
+    def update(self, instance, validated_data):
+        """ 수정 시에도 validated_data를 그대로 사용 """
+        instance.role_id = validated_data.get('role_id', instance.role_id)
+        instance.place_id = validated_data.get('place_id', instance.place_id)
+        instance.name = validated_data.get('name', instance.name)
+        instance.phone = validated_data.get('phone', instance.phone)
+        instance.note = validated_data.get('note', instance.note)
+        instance.save()
+        return instance
+
+# ========== OptionalExpense Serializer ==========
+class OptionalExpenseSerializer(serializers.ModelSerializer):
+    """
+    선택적 지출 항목 직렬화
+
+    - 읽기: 포맷된 가격(price_display) 표시
+    - 쓰기: 장소 ID(place_id)를 받아 처리
+    """
+    # 읽기 전용 추가 필드
+    price_display = serializers.CharField(
+        source='price_display',  # 모델의 @property 사용
+        read_only=True,
+        help_text="포맷된 가격 (예: '15,000원')"
+    )
+
+    # 쓰기 전용 필드
+    place_id = serializers.IntegerField(
+        write_only=True,
+        required=True,
+        help_text="지출 항목이 속한 장소의 ID"
+    )
+
+    class Meta:
+        model = OptionalExpense
+        fields = [
+            # 기본 필드
+            'id',
+            'place',
+            'place_id',         # 쓰기용
+            'item_name',
+            'price',
+            'description',
+            'display_order',
+
+            # 추가 필드 (읽기 전용)
+            'price_display',
+
+            # 메타 정보
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = [
+            'id',
+            'created_at',
+            'updated_at',
+        ]
+        # 쓰기 전용 필드는 Meta에 없어도 되지만, 명시적으로 place는 읽기 전용임을 나타낼 수 있음
+        extra_kwargs = {
+            'place': {'read_only': True}
+        }
+
+
+    def validate_price(self, value):
+        """ 가격은 0 이상이어야 함 """
+        if value is not None and value < 0:
+            raise serializers.ValidationError("가격은 0 이상이어야 합니다.")
+        return value
+
+    def validate_place_id(self, value):
+        """ 장소 ID가 실제로 존재하는지 검증 """
+        if not Place.objects.filter(id=value).exists():
+            raise serializers.ValidationError("존재하지 않는 장소 ID입니다.")
+        return value
+
+    def create(self, validated_data):
+        """
+        생성 시에는 validated_data에 place_id가 포함되어 있으므로
+        ModelSerializer가 자동으로 처리
+        """
+        return super().create(validated_data)
