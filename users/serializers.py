@@ -54,7 +54,11 @@ class TravelerSerializer(serializers.ModelSerializer):
         model = Traveler
         fields = [
             'id',
-            'full_name_kr',  # property 필드
+            'last_name_kr',
+            'first_name_kr',
+            'full_name_kr',
+            'first_name_en',
+            'last_name_en',
             'phone',
             'email',
             'birth_date',

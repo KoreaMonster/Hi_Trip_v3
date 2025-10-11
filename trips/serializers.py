@@ -66,10 +66,10 @@ class TripParticipantSerializer(serializers.ModelSerializer):
     여행 참가자 정보 직렬화
     """
     # Traveler 정보를 중첩(nested)해서 표시
-    travler = TravelerSerializer(read_only=True)
+    traveler = TravelerSerializer(read_only=True)
 
     # 또는 ID만 받을 때 (참가 등록 시)
-    travler_id = serializers.IntegerField(write_only=True, required=True)
+    traveler_id = serializers.IntegerField(write_only=True, required=True)
 
     class Meta:
         model = TripParticipant
@@ -90,5 +90,6 @@ class TripDetailSerializer(TripSerializer):
     participants = TripParticipantSerializer(many=True, read_only=True)
 
     class Meta:
+        model = Trip #DRF에서 상속을 활용했음. 여기서 부모의 Meta의 속성이 상속될 것이라 예상 -> 그러나 완전이 덮어씀(override)
         # 부모 클래스의 fields에 participants 추가
         fields = TripSerializer.Meta.fields + ['participants']
