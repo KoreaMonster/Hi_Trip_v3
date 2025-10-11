@@ -7,7 +7,7 @@ from .models import User, Traveler
 class UserAdmin(BaseUserAdmin):
     """직원 관리자 페이지"""
 
-    list_display = ['username', 'full_name_kr_display', 'email', 'phone', 'role', 'is_approved']
+    list_display = ['username', 'full_name_kr', 'email', 'phone', 'role', 'is_approved']
     list_filter = ['role', 'is_approved', 'is_staff', 'is_active']
     search_fields = ['username', 'first_name_kr', 'last_name_kr', 'email', 'phone']
 
@@ -15,15 +15,12 @@ class UserAdmin(BaseUserAdmin):
         ('추가 정보', {'fields': ('phone', 'first_name_kr', 'last_name_kr')}),
         ('권한 설정', {'fields': ('role', 'is_approved')}),
     )
-    @admin.display(description='이름') # 관리자 페이지에 표시될 컬럼명 설정
-    def full_name_kr_display(self, obj):
-        return obj.full_name_kr
 
 
 @admin.register(Traveler)
 class TravelerAdmin(admin.ModelAdmin):
     """여행자 관리자 페이지"""
-    list_display = ['full_name_kr', 'phone', 'birth_date', 'gender', 'payment_complete', 'created_at']
+    list_display = ['full_name_kr', 'phone', 'birth_date', 'gender', 'payment_status', 'created_at']
     list_filter = ['gender', 'country', 'passport_verified', 'identity_verified', 'booking_verified']
     search_fields = ['last_name_kr', 'first_name_kr', 'phone', 'email']
     readonly_fields = ['created_at', 'updated_at']
