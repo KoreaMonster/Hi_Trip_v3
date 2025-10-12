@@ -132,7 +132,6 @@ class ScheduleSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('예산은 0 이상이어야 합니다.')
         return value
 
-
 class PlaceCategorySerializer(serializers.ModelSerializer):
     """
     장소 카테고리 직렬화
@@ -315,7 +314,6 @@ class CoordinatorRoleSerializer(serializers.ModelSerializer):
             'id',
             'created_at'
         ]
-
 
 class PlaceCoordinatorSerializer(serializers.ModelSerializer):
     """
