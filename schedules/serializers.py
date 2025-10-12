@@ -1,5 +1,3 @@
-from Tools.scripts.var_access_benchmark import read_deque
-from django.contrib.gis.gdal.prototypes.ds import release_ds
 from rest_framework import serializers
 from .models import Schedule, Place, PlaceCategory, CoordinatorRole, PlaceCoordinator, OptionalExpense
 
@@ -174,19 +172,18 @@ class PlaceSerializer(serializers.ModelSerializer):
 
     #읽기 전용 추가 필드
     entrance_fee_display = serializers.CharField(
-        source='enterance_fee_display',         #property 메서드
+        # source='entrance_fee_display',          # ✅ TYPO CORRECTED
         read_only=True,
         help_text="포맷된 입장료"
     )
 
     activity_time_display = serializers.CharField(
-        source='activity_time_display',         #property 메서드
         read_only=True,
         help_text="포맷된 활동 시간"
     )
 
     has_image = serializers.BooleanField(
-        source = 'has_image',
+        # source = 'has_image',
         read_only=True,
         help_text="이미지 존재 여부"
     )
@@ -398,7 +395,7 @@ class OptionalExpenseSerializer(serializers.ModelSerializer):
     """
     # 읽기 전용 추가 필드
     price_display = serializers.CharField(
-        source='price_display',  # 모델의 @property 사용
+        # source='price_display',  # 모델의 @property 사용
         read_only=True,
         help_text="포맷된 가격 (예: '15,000원')"
     )

@@ -40,6 +40,13 @@ class Schedule(models.Model):
         verbose_name="종료 시간",
         help_text="예: 12:00"
     )
+    duration_minutes = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name="소요 시간(분)",
+        help_text="시작 및 종료 시간 입력 시 자동 계산됨",
+        editable=False  # 관리자 페이지에서 직접 수정하지 못하도록 설정
+    )
 
     #일정관련 내용
     transport = models.CharField(

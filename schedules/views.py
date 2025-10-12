@@ -1,16 +1,6 @@
-from functools import partial
 
-from django.shortcuts import render
-from drf_spectacular.utils import extend_schema
-from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from drf_spectacular.utils import extend_schema
-from rest_framework.response import Response
-from yaml import serialize
-
-from schedules.models import Schedule, OptionalExpense, CoordinatorRole, PlaceCoordinator
-from schedules.serializers import ScheduleSerializer, PlaceSerializer, CoordinatorRoleSerializer, \
+from schedules.models import CoordinatorRole, PlaceCoordinator
+from schedules.serializers import CoordinatorRoleSerializer, \
     PlaceCoordinatorSerializer
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -137,9 +127,9 @@ def update_schedule(request, trip_id, schedule_id):
 @permission_classes([IsAuthenticated])
 def delete_schedule(request, trip_id, schedule_id):
     """
-      일정 삭제
-      DELETE /api/trips/{trip_id}/schedules/{schedule_id}/
-      """
+        일정 삭제
+        DELETE /api/trips/{trip_id}/schedules/{schedule_id}/
+    """
     try:
         schedule = Schedule.objects.get(id=schedule_id, trip_id=trip_id)
     except Schedule.DoesNotExist:
