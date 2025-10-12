@@ -144,9 +144,6 @@ class Schedule(models.Model):
         """
         저장 시 자동으로 duration_minutes 계산
         """
-        # clean() 메서드 실행 (데이터 검증)
-        self.full_clean()
-
         # 소요 시간 자동 계산 (향후 자동 시간 재계산에 활용)
         if self.start_time and self.end_time:
             from datetime import datetime, timedelta

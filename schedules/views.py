@@ -67,10 +67,19 @@ def schedule_list_create(request, trip_id):
         serializer = ScheduleSerializer(schedules, many=True)
         return Response(serializer.data)
 
+
     elif request.method == 'POST':
         serializer = ScheduleSerializer(data=request.data)
         if serializer.is_valid():
-            # trip 객체를 save()에 직접 전달하여 관계를 설정합니다.
+            # 중복 체크를 명시적으로 수행
+            day_number = serializer.validated_data.get('day_number')
+            order = serializer.validated_data.get('order')
+
+            if Schedule.objects.filter(trip=trip, day_number=day_number, order=order).exists():
+                return Response(
+                    {'error': f'{day_number}일차의 {order}번째 순서는 이미 존재합니다.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             serializer.save(trip=trip)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -566,14 +575,16 @@ def coordinator_list_create(request, place_id):
         return Response(serializer.data)
 
     elif request.method == 'POST':
-        # (수정) 요청 데이터에 place_id를 자동으로 추가합니다.
-        data = request.data.copy()
-        data['place_id'] = place.id
-        serializer = PlaceCoordinatorSerializer(data=data)
+        serializer = PlaceCoordinatorSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            # URL에서 이미 place_id를 가져왔으므로 직접 전달
+            serializer.save(place_id=place.id)
+            return Response(
+                serializer.data,
+                status=status.HTTP_201_CREATED)
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST)
 
 # ==================== OptionalExpense Views ====================
 #

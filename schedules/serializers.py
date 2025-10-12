@@ -279,15 +279,12 @@ class PlaceSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        """
-        생성 시 category_id 처리
-        """
         category_id = validated_data.pop('category_id', None)
-
-        # category_id가 있으면 category 설정
         if category_id:
             validated_data['category_id'] = category_id
-
+        elif 'category' in validated_data:
+            # category가 직접 전달된 경우 처리
+            pass
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
@@ -377,8 +374,14 @@ class PlaceCoordinatorSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        #생성 시 role_id와 place_id를 실제 객체로 변환하여 저장
-        #validated_data에는 role_id, place_id가 포함됨
+        # write_only 필드를 실제 FK 필드로 변환
+        role_id = validated_data.pop('role_id', None)
+        place_id = validated_data.pop('place_id', None)
+
+        if role_id:
+            validated_data['role_id'] = role_id
+        if place_id:
+            validated_data['place_id'] = place_id
 
         return PlaceCoordinator.objects.create(**validated_data)
 
