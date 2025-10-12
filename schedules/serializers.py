@@ -23,6 +23,9 @@ class ScheduleSerializer(serializers.ModelSerializer):
         read_only=True,
         help_text="소요 시간을 사람이 읽기 쉬운 형식으로 표시"
     )
+    place = serializers.PrimaryKeyRelatedField(
+        queryset=Place.objects.all(), write_only=True, required=False, allow_null=True
+    )
 
     class Meta:
         model = Schedule
@@ -55,7 +58,11 @@ class ScheduleSerializer(serializers.ModelSerializer):
             'duration_minutes',  # save()에서 자동 계산
             'created_at',
             'updated_at',
+            'trip',
         ]
+        extra_kwargs = {
+            'place': {'write_only': True},
+        }
 
     def get_duration_display(self, obj):
         """
