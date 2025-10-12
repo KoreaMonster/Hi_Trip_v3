@@ -12,19 +12,28 @@ class ScheduleSerializer(serializers.ModelSerializer):
     추가 정보 제공
     입력 데이터 검증
     """
-    #읽기 전용 필드
+    place = serializers.PrimaryKeyRelatedField(read_only=True, allow_null=True)
+
+    # 사람 친화적 보조 정보
     place_name = serializers.CharField(
-        source='place.name',     #place 모델의 name필드
+        source='place.name',
         read_only=True,
         help_text="방문 장소 이름"
     )
-
     duration_display = serializers.SerializerMethodField(
         read_only=True,
         help_text="소요 시간을 사람이 읽기 쉬운 형식으로 표시"
     )
-    place = serializers.PrimaryKeyRelatedField(
-        queryset=Place.objects.all(), write_only=True, required=False, allow_null=True
+
+    # === 쓰기 전용 ===
+    # 요청에서 place_id(정수) → 내부적으로 place(객체)로 매핑
+    place_id = serializers.PrimaryKeyRelatedField(
+        source='place',
+        queryset=Place.objects.all(),
+        write_only=True,
+        required=False,
+        allow_null=True,
+        help_text="장소 ID(선택). 없으면 null 일정으로 생성"
     )
 
     class Meta:
@@ -33,7 +42,8 @@ class ScheduleSerializer(serializers.ModelSerializer):
             # 기본 필드
             'id',
             'trip',
-            'place',
+            'place',  # 읽기: 항상 응답에 포함 (null 가능)
+            'place_id',  # 쓰기: 요청에서만 사용
             'day_number',
             'start_time',
             'end_time',
@@ -44,15 +54,14 @@ class ScheduleSerializer(serializers.ModelSerializer):
             'budget',
             'order',
 
-            # 추가 필드 (읽기 전용)
+            # 추가 읽기 필드
             'place_name',
             'duration_display',
 
-            # 메타 정보
+            # 메타
             'created_at',
             'updated_at',
         ]
-        # 읽기 전용 필드
         read_only_fields = [
             'id',
             'duration_minutes',  # save()에서 자동 계산
@@ -60,9 +69,6 @@ class ScheduleSerializer(serializers.ModelSerializer):
             'updated_at',
             'trip',
         ]
-        extra_kwargs = {
-            'place': {'write_only': True},
-        }
 
     def get_duration_display(self, obj):
         """
@@ -170,12 +176,15 @@ class PlaceSerializer(serializers.ModelSerializer):
     category = PlaceCategorySerializer(read_only=True)
 
     #작성용 필드
-    category_id = serializers.IntegerField(
+    category_id = serializers.PrimaryKeyRelatedField(
+        source="category",
+        queryset=PlaceCategory.objects.all(),
         write_only=True,
         required=False,
         allow_null=True,
-        help_text="카테고리 ID"
+        help_text="카테고리 ID (선택). 없으면 카테고리 없이 생성됩니다."
     )
+
 
     #읽기 전용 추가 필드
     entrance_fee_display = serializers.CharField(
@@ -194,6 +203,8 @@ class PlaceSerializer(serializers.ModelSerializer):
         read_only=True,
         help_text="이미지 존재 여부"
     )
+    image = serializers.ImageField(required=False, allow_null=True)  # 테스트 요구에 맞춰 조정
+
 
     # ========== AI 대체 장소 정보 (파싱) ==========
     alternative_place_info = serializers.SerializerMethodField(
@@ -252,15 +263,6 @@ class PlaceSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('입장료는 0 이상이어야 합니다.')
         return value
 
-    def validate_category_id(self, value):
-        """
-        카테고리 ID 검증: 존재하는 카테고리인지 확인
-        """
-        if value is not None:
-            if not PlaceCategory.objects.filter(id=value).exists():
-                raise serializers.ValidationError('존재하지 않는 카테고리입니다.')
-        return value
-
     def validate_ai_alternative_place(self, value):
         """
         AI 대체 장소 JSON 검증
@@ -278,26 +280,27 @@ class PlaceSerializer(serializers.ModelSerializer):
 
         return value
 
-    def create(self, validated_data):
-        category_id = validated_data.pop('category_id', None)
-        if category_id:
-            validated_data['category_id'] = category_id
-        elif 'category' in validated_data:
-            # category가 직접 전달된 경우 처리
-            pass
-        return super().create(validated_data)
-
-    def update(self, instance, validated_data):
-        """
-        수정 시 category_id 처리
-        """
-        category_id = validated_data.pop('category_id', None)
-
-        # category_id가 있으면 category 설정
-        if category_id:
-            validated_data['category_id'] = category_id
-
-        return super().update(instance, validated_data)
+    #
+    # def create(self, validated_data):
+    #     category_id = validated_data.pop('category_id', None)
+    #     if category_id:
+    #         validated_data['category_id'] = category_id
+    #     elif 'category' in validated_data:
+    #         # category가 직접 전달된 경우 처리
+    #         pass
+    #     return super().create(validated_data)
+    #
+    # def update(self, instance, validated_data):
+    #     """
+    #     수정 시 category_id 처리
+    #     """
+    #     category_id = validated_data.pop('category_id', None)
+    #
+    #     # category_id가 있으면 category 설정
+    #     if category_id:
+    #         validated_data['category_id'] = category_id
+    #
+    #     return super().update(instance, validated_data)
 
 class CoordinatorRoleSerializer(serializers.ModelSerializer):
     """
@@ -323,77 +326,35 @@ class PlaceCoordinatorSerializer(serializers.ModelSerializer):
     - 읽기: 역할(role) 정보를 중첩해서 표시
     - 쓰기: 역할 ID(role_id), 장소 ID(place_id)를 받아 처리
     """
-    #읽기 전용 중첩
+    # 읽기 전용: 응답에 역할 정보를 보기 좋게 포함
     role = CoordinatorRoleSerializer(read_only=True)
-    
-    #쓰기 전용 Field
-    role_id = serializers.IntegerField(
+
+    # 쓰기 전용: 정수 ID로 입력 → 내부적으로 role(객체)에 바인딩
+    role_id = serializers.PrimaryKeyRelatedField(
+        source='role',
+        queryset=CoordinatorRole.objects.all(),
         write_only=True,
-        required=True,
-        help_text="담당자 역할 ID"
+        help_text="역할 ID"
     )
-    place_id = serializers.IntegerField(
-        write_only=True,
-        required=True,
-        help_text="담당 장소 ID"
-    )
+    # place는 URL로 고정되므로 읽기 전용으로만 노출 (본문 입력 금지)
+    place = serializers.PrimaryKeyRelatedField(read_only=True)
+
     class Meta:
         model = PlaceCoordinator
         fields = [
-            # 기본 필드
             'id',
-            'place',        # ForeignKey 필드 (읽기 시 ID 반환)
-            'place_id',     # 쓰기용
-            'role',         # 읽기용 (중첩 객체)
-            'role_id',      # 쓰기용
+            'place',  # read_only (URL로 고정, 뷰에서 save(place=place))
+            'role',  # read_only (응답용)
+            'role_id',  # write_only (요청용)
             'name',
             'phone',
             'note',
-
-            # 메타 정보
             'created_at',
             'updated_at',
         ]
-        read_only_fields = [
-            'id',
-            'created_at',
-            'updated_at',
-        ]
+        read_only_fields = ['id', 'place', 'created_at', 'updated_at']
 
-    def validate_role_id(self, value):
-        # 역할 ID가 실제로 존재하는지 검증
 
-        if not CoordinatorRole.objects.filter(id=value).exists():
-            raise serializers.ValidationError("존재하지 않는 역할 ID입니다.")
-        return value
-
-    def validate_place_id(self, value):
-        #장소 ID가 실제로 존재하는지 검증
-        if not Place.objects.filter(id=value).exists():
-            raise serializers.ValidationError("존재하지 않는 장소 ID입니다.")
-        return value
-
-    def create(self, validated_data):
-        # write_only 필드를 실제 FK 필드로 변환
-        role_id = validated_data.pop('role_id', None)
-        place_id = validated_data.pop('place_id', None)
-
-        if role_id:
-            validated_data['role_id'] = role_id
-        if place_id:
-            validated_data['place_id'] = place_id
-
-        return PlaceCoordinator.objects.create(**validated_data)
-
-    def update(self, instance, validated_data):
-        """ 수정 시에도 validated_data를 그대로 사용 """
-        instance.role_id = validated_data.get('role_id', instance.role_id)
-        instance.place_id = validated_data.get('place_id', instance.place_id)
-        instance.name = validated_data.get('name', instance.name)
-        instance.phone = validated_data.get('phone', instance.phone)
-        instance.note = validated_data.get('note', instance.note)
-        instance.save()
-        return instance
 
 # ========== OptionalExpense Serializer ==========
 class OptionalExpenseSerializer(serializers.ModelSerializer):
@@ -409,13 +370,13 @@ class OptionalExpenseSerializer(serializers.ModelSerializer):
         read_only=True,
         help_text="포맷된 가격 (예: '15,000원')"
     )
-
-    # 쓰기 전용 필드
-    place_id = serializers.IntegerField(
-        write_only=True,
-        required=True,
-        help_text="지출 항목이 속한 장소의 ID"
-    )
+    #
+    # # 쓰기 전용 필드
+    # place_id = serializers.IntegerField(
+    #     write_only=True,
+    #     required=True,
+    #     help_text="지출 항목이 속한 장소의 ID"
+    # )
 
     class Meta:
         model = OptionalExpense
