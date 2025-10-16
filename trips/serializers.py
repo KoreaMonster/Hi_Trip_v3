@@ -130,18 +130,18 @@ class TripDetailSerializer(TripSerializer):
 
         return TripParticipantSerializer(obj.participants.all(), many=True).data
 
-    class AssignManagerSerializer(serializers.Serializer):
-        """총괄담당자가 여행 담당자를 교체할 때 사용하는 전용 Serializer."""
+class AssignManagerSerializer(serializers.Serializer):
+    """총괄담당자가 여행 담당자를 교체할 때 사용하는 전용 Serializer."""
 
-        manager_id = serializers.PrimaryKeyRelatedField(
-            queryset=User.objects.filter(role="manager"),
-            source="manager",
-            help_text="새롭게 배정할 담당자(User) ID",
-        )
+    manager_id = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.filter(role="manager"),
+        source="manager",
+        help_text="새롭게 배정할 담당자(User) ID",
+    )
 
-        def update_trip(self, trip: Trip) -> Trip:
-            """Trip 인스턴스에 담당자를 배정하고 저장한 뒤 반환한다."""
+    def update_trip(self, trip: Trip) -> Trip:
+        """Trip 인스턴스에 담당자를 배정하고 저장한 뒤 반환한다."""
 
-            manager = self.validated_data["manager"]
-            trip.assign_manager(manager)
-            return trip
+        manager = self.validated_data["manager"]
+        trip.assign_manager(manager)
+        return trip
