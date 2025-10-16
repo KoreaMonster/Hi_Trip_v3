@@ -1,28 +1,35 @@
-from django.urls import path
-from . import views
+"""Schedules 앱의 라우터 구성.
 
+ViewSet 구조에 맞춰 DRF Router + Nested Router를 사용합니다.
+"""
 
-urlpatterns = [
-    # ========== 일정 (Schedule) ==========
-    # 'schedule-list-create'라는 이름으로 /api/schedules/trips/<id>/schedules/ URL을 정의합니다.
-    path('trips/<int:trip_id>/schedules/', views.schedule_list_create, name='schedule-list-create'),
+from rest_framework.routers import DefaultRouter
+from rest_framework_nested.routers import NestedSimpleRouter
 
-    # 'schedule-detail-action'이라는 이름으로 개별 일정을 다루는 URL을 정의합니다.
-    path('trips/<int:trip_id>/schedules/<int:schedule_id>/', views.schedule_detail_action, name='schedule-detail-action'),
+from trips.urls import router as trips_router
 
-    # ========== 장소 (Place) ==========
-    # (수정) 'place-list-create' 라는 이름으로 /places/ URL을 정의합니다.
-    path('places/', views.place_list_create, name='place-list-create'),
+from .views import (
+    CoordinatorRoleViewSet,
+    OptionalExpenseViewSet,
+    PlaceCategoryViewSet,
+    PlaceCoordinatorViewSet,
+    PlaceViewSet,
+    ScheduleViewSet,
+)
 
-    # (수정) 'place-detail-action' 이라는 이름으로 개별 장소를 다루는 URL을 정의합니다.
-    path('places/<int:place_id>/', views.place_detail_action, name='place-detail-action'),
+# 기본 Router: 장소/카테고리/담당자 역할 등 독립 리소스를 등록
+router = DefaultRouter()
+router.register("places", PlaceViewSet, basename="place")
+router.register("categories", PlaceCategoryViewSet, basename="place-category")
+router.register("coordinator-roles", CoordinatorRoleViewSet, basename="coordinator-role")
 
-    # ========== 선택 비용 (Optional Expense) ==========
-    path('places/<int:place_id>/expenses/', views.expense_list_create, name='expense-list-create'),
-    path('expenses/calculate/', views.calculate_expense, name='calculate-expense'),
+# 장소 하위 리소스(선택 지출, 담당자)를 위한 Nested Router
+place_router = NestedSimpleRouter(router, r"places", lookup="place")
+place_router.register("expenses", OptionalExpenseViewSet, basename="place-expense")
+place_router.register("coordinators", PlaceCoordinatorViewSet, basename="place-coordinator")
 
-    # ========== 장소 담당자 (Place Coordinator) & 역할 (Role) ==========
-    path('places/<int:place_id>/coordinators/', views.coordinator_list_create, name='coordinator-list-create'),
-    path('categories/', views.list_categories, name='list-categories'),
-    path('coordinator-roles/', views.list_coordinator_roles, name='list-coordinator-roles'),
-]
+# 여행 하위 일정 라우터: trips 앱에서 사용 중인 router를 재활용합니다.
+trip_schedule_router = NestedSimpleRouter(trips_router, r"trips", lookup="trip")
+trip_schedule_router.register("schedules", ScheduleViewSet, basename="trip-schedule")
+
+urlpatterns = router.urls + place_router.urls + trip_schedule_router.urls

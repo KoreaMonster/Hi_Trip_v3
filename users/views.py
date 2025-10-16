@@ -149,7 +149,6 @@ class LoginAPIView(APIView):
         login(request, user)
         return Response(UserDetailSerializer(user).data)
 
-
 class LogoutAPIView(APIView):
     """현재 세션을 종료하는 APIView."""
 

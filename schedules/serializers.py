@@ -1,5 +1,14 @@
+"""Schedules 앱에서 사용할 Serializer 정의."""
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
-from .models import Schedule, Place, PlaceCategory, CoordinatorRole, PlaceCoordinator, OptionalExpense
+from .models import (
+    Schedule,
+    Place,
+    PlaceCategory,
+    CoordinatorRole,
+    PlaceCoordinator,
+    OptionalExpense,
+)
 
 
 #Schedule Serializer
@@ -12,6 +21,14 @@ class ScheduleSerializer(serializers.ModelSerializer):
     추가 정보 제공
     입력 데이터 검증
     """
+    """Schedule 모델의 입·출력을 담당하는 핵심 Serializer.
+
+        - 읽기 전용 필드(`place_name`, `duration_display`)를 통해 프론트에서 바로 사용할 수 있는 정보를 제공합니다.
+        - 쓰기 전용 필드(`place_id`)는 HTTP 요청 본문에서 정수 ID만 넘겨도 ForeignKey를 연결할 수 있게 도와줍니다.
+        - `validate()`와 `create()`/`update()`에서 모델의 `clean()`과 `unique_together` 규칙을 직접 호출하여
+            뷰(View) 코드에는 비즈니스 규칙이 남지 않도록 설계했습니다.
+        """
+
     place = serializers.PrimaryKeyRelatedField(read_only=True, allow_null=True)
 
     # 사람 친화적 보조 정보
@@ -107,24 +124,49 @@ class ScheduleSerializer(serializers.ModelSerializer):
         Raises:
             ValidationError: 검증 실패 시
         """
-        # end_time이 start_time보다 늦은지 확인
-        start_time = data.get('start_time')
-        end_time = data.get('end_time')
+        """모든 필드를 종합적으로 검증합니다.
 
-        if start_time and end_time:
-            if end_time <= start_time:
-                raise serializers.ValidationError({
-                    'end_time': '종료 시간은 시작 시간보다 늦어야 합니다.'
-                })
+                1) 시작·종료 시간의 순서를 확인하고,
+                2) 일차(`day_number`) 값이 1 이상인지 체크하며,
+                3) 같은 여행(trip) 안에서 같은 일차/순서가 중복되지는 않는지 검사합니다.
 
-        # day_number가 양수인지 확인
-        day_number = data.get('day_number')
-        if day_number and day_number < 1:
-            raise serializers.ValidationError({
-                'day_number': '일차는 1 이상이어야 합니다.'
-            })
+                CBV(ViewSet)에서 `serializer.is_valid()`만 호출하면 위 조건이 모두 자동으로 적용되므로
+                뷰 코드에 별도의 if 문을 추가할 필요가 없습니다.
+                """
 
-        return data
+        validated = super().validate(data)
+
+        start_time = validated.get("start_time")
+        end_time = validated.get("end_time")
+        if start_time and end_time and end_time <= start_time:
+            raise serializers.ValidationError(
+                {"end_time": "종료 시간은 시작 시간보다 늦어야 합니다."}
+            )
+
+        day_number = validated.get("day_number")
+        if day_number is not None and day_number < 1:
+            raise serializers.ValidationError(
+                {"day_number": "일차는 1 이상이어야 합니다."}
+            )
+
+        # ===== 동일한 날/순서 중복 검사 =====
+        # ViewSet에서 context로 넘겨준 trip 객체를 사용합니다.
+        trip = self.context.get("trip") or getattr(self.instance, "trip", None)
+        order = validated.get("order")
+        if trip and day_number is not None and order is not None:
+            qs = Schedule.objects.filter(trip=trip, day_number=day_number, order=order)
+            if self.instance is not None:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    {
+                        "non_field_errors": [
+                            f"{day_number}일차의 {order}번째 순서는 이미 존재합니다."
+                        ]
+                    }
+                )
+
+        return validated
 
     def validate_budget(self, value):
         """
@@ -140,8 +182,39 @@ class ScheduleSerializer(serializers.ModelSerializer):
             ValidationError: 검증 실패 시
         """
         if value is not None and value < 0:
-            raise serializers.ValidationError('예산은 0 이상이어야 합니다.')
+            raise serializers.ValidationError("예산은 0 이상이어야 합니다.")
         return value
+
+    # --------------------------- 저장 로직 ---------------------------
+    def _run_model_validation(self, instance: Schedule) -> None:
+        """모델의 ``clean()``을 호출하여 추가 비즈니스 규칙을 실행합니다.
+
+        DRF Serializer는 기본적으로 모델의 ``full_clean()``을 호출하지 않기 때문에
+        우리가 직접 호출해야 모델에 정의된 검증 규칙이 함께 적용됩니다.
+        """
+
+        try:
+            instance.full_clean()
+        except DjangoValidationError as exc:  # 모델이 반환한 에러를 DRF 형식으로 변환
+            raise serializers.ValidationError(exc.message_dict)
+
+    def create(self, validated_data):
+        """새로운 Schedule 인스턴스를 생성할 때 모델 검증을 함께 실행합니다."""
+
+        schedule = Schedule(**validated_data)
+        self._run_model_validation(schedule)
+        schedule.save()
+        return schedule
+
+    def update(self, instance, validated_data):
+        """기존 Schedule 업데이트 시에도 모델 검증을 보장합니다."""
+
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        self._run_model_validation(instance)
+        instance.save()
+        return instance
+
 
 class PlaceCategorySerializer(serializers.ModelSerializer):
     """
@@ -378,6 +451,15 @@ class OptionalExpenseSerializer(serializers.ModelSerializer):
     #     help_text="지출 항목이 속한 장소의 ID"
     # )
 
+    # 쓰기 전용 필드: Nested Router에서 place를 자동 주입하지만, 단독 사용 시에도 ID 입력을 허용합니다.
+    place_id = serializers.PrimaryKeyRelatedField(
+        source="place",
+        queryset=Place.objects.all(),
+        write_only=True,
+        required=False,
+        help_text="지출 항목이 속한 장소의 ID",
+    )
+
     class Meta:
         model = OptionalExpense
         fields = [
@@ -414,15 +496,39 @@ class OptionalExpenseSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("가격은 0 이상이어야 합니다.")
         return value
 
-    def validate_place_id(self, value):
-        """ 장소 ID가 실제로 존재하는지 검증 """
-        if not Place.objects.filter(id=value).exists():
-            raise serializers.ValidationError("존재하지 않는 장소 ID입니다.")
-        return value
-
     def create(self, validated_data):
-        """
-        생성 시에는 validated_data에 place_id가 포함되어 있으므로
-        ModelSerializer가 자동으로 처리
-        """
-        return super().create(validated_data)
+        """모델의 ``clean()``을 호출해 가격과 항목명 규칙을 재확인합니다."""
+
+        expense = OptionalExpense(**validated_data)
+        try:
+            expense.full_clean()
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict)
+        expense.save()
+        return expense
+
+    def update(self, instance, validated_data):
+        """업데이트 시에도 모델 레벨 검증을 실행합니다."""
+
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        try:
+            instance.full_clean()
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict)
+        instance.save()
+        return instance
+
+
+class ExpenseSelectionSerializer(serializers.Serializer):
+    """선택한 선택 비용 ID 목록을 검증하는 전용 Serializer.
+
+    기존 함수형 뷰에서는 단순 리스트 검증만 수행했지만, Serializer로 분리하면
+    ViewSet 액션에서도 재사용할 수 있고, 스웨거 문서에도 자동으로 노출됩니다.
+    """
+
+    expense_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        allow_empty=False,
+        help_text="합산할 OptionalExpense의 ID 목록",
+    )
