@@ -1,295 +1,149 @@
-from http.client import responses
+"""trips 앱의 REST API ViewSet 모음."""
 
-from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from drf_spectacular.utils import extend_schema, OpenApiParameter
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema
+from rest_framework import mixins, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
+from users.permissions import IsApprovedStaff, IsSuperAdminUser
 
 from .models import Trip, TripParticipant
-from .serializers import TripSerializer, TripDetailSerializer, TripParticipantSerializer
-from users.models import Traveler, User
-
-
-#여행 목록을 조회
-@extend_schema(
-    summary= "여행 목록 조회",
-    description= """
-    로그인한 직원의 여행 목록을 반환합니다.
-    - 총괄담장자: 모든 여행을 조회할 수 있음.
-    - 담당자: 자신이 담당하는 여행만 조회 가능
-    """,
-    responses={200, TripSerializer(many=True)}
+from .serializers import (
+    AssignManagerSerializer,
+    TripDetailSerializer,
+    TripParticipantSerializer,
+    TripSerializer,
 )
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def list_trips(request):
-    """
-    여행 목록 조회
-    GET /api/tirps
-    """
-    #1. 승인된 직원만 조회 가능
-    if not request.user.is_approved:
-        return Response(
-            {"error":"승인되지 않은 직원입니다."},
-            status = status.HTTP_403_FORBIDDEN
-        )
 
-    #2. 역할에 따라 다른 목록을 반환
-    if request.user.role == "super_admin":
-        # 총괄관리자는 모든 여행 목록
-        trips = Trip.objects.all()
-    else:
-        #담당자는 자신이 담당하는 여행만
-        trips = Trip.objects.filter(manager=request.user)
 
-    serializer = TripSerializer(trips, many=True)
+class TripViewSet(viewsets.ModelViewSet):
+    """여행 CRUD와 관리자 전용 부가 액션을 담당한다."""
 
-    return Response(serializer.data)
-
-# 새로운 여행을 생성
-@extend_schema(
-    summary="여행 생성",
-    description="새로운 여행을 생성합니다. 초대코드는 자동 생성됩니다.",
-    request=TripSerializer,
-    responses={201: TripSerializer}
-)
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def create_trip(request):
-    """
-    여행 생성 API
-    POST /api/trips/
-
-    요청 예시:
-    {
-        "title": "제주도 힐링 여행",
-        "destination": "제주도",
-        "start_date": "2025-11-01",
-        "end_date": "2025-11-03"
-    }
-    """
-    #1. 승인된 담당자만 생성 가능
-    if not request.user.is_approved:
-        return Response(
-            {'error':'승인되지 않은 담당자입니다.'},
-            status=status.HTTP_403_FORBIDDEN
-        )
-
-    #2. 데이터 검증
-    serializer = TripSerializer(data=request.data)
-
-    if serializer.is_valid():
-        #저장
-        trip = serializer.save()
-
-        return Response(
-            TripSerializer(trip).data,
-            status=status.HTTP_201_CREATED
-        )
-    #데이터 검증을 실패함
-    return Response(
-        serializer.errors,
-        status=status.HTTP_400_BAD_REQUEST
+    serializer_class = TripSerializer
+    permission_classes = [IsAuthenticated, IsApprovedStaff]
+    queryset = Trip.objects.select_related("manager").prefetch_related(
+        "participants__traveler"
     )
 
+    def get_queryset(self):
+        """로그인한 사용자의 역할에 따라 조회 가능한 여행을 제한한다."""
 
-#여행 상세 조회
-@extend_schema(
-    summary="여행 상세 조회",
-    description="특정 여행의 상세 정보를 조회합니다. 참가자 목록 포함.",
-    responses={200: TripDetailSerializer}
-)
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def trip_detail(request, trip_id):
-    """
-    여행 상세 조회 API
-    GET /api/trips/{trip_id}/
-    """
-    #승인된 직원인지 확인
-    if not request.user.is_approved:
-        return Response(
-            {'error':'승인되지 않은 직원입니다.'},
-            status=status.HTTP_403_FORBIDDEN
+        qs = super().get_queryset()
+        # 총괄담당자(super_admin)는 모든 여행을 조회할 수 있다.
+        if self.request.user.role == "super_admin":
+            return qs
+
+        # 담당자는 자신이 담당한 여행만 볼 수 있도록 필터링한다.
+        return qs.filter(manager=self.request.user)
+
+    def get_serializer_class(self):
+        """상세 조회 시에는 참가자 정보를 포함한 Serializer를 사용한다."""
+
+        if self.action == "retrieve":
+            return TripDetailSerializer
+        return super().get_serializer_class()
+
+    def perform_create(self, serializer):
+        """여행 생성 시 기본 담당자를 지정한다.
+
+        - 담당자(role=manager)가 직접 생성하면 자동으로 자신을 담당자로 설정한다.
+        - 총괄담당자가 생성할 경우에는 요청 본문에서 명시한 담당자를 유지한다.
+        """
+
+        manager = serializer.validated_data.get("manager")
+        if manager is None and self.request.user.role == "manager":
+            serializer.save(manager=self.request.user)
+        else:
+            serializer.save()
+
+    @extend_schema(
+        summary="여행 담당자 배정",
+        description="총괄담당자가 특정 여행에 담당자를 지정합니다.",
+        request=AssignManagerSerializer,
+        responses={200: TripSerializer},
+    )
+    @action(
+        detail=True,
+        methods=["post"],
+        permission_classes=[IsAuthenticated, IsSuperAdminUser],
+        url_path="assign-manager",
+    )
+    def assign_manager(self, request, pk=None):
+        """총괄담당자 전용 담당자 배정 액션."""
+
+        trip = self.get_object()
+        serializer = AssignManagerSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.update_trip(trip)
+        return Response(self.get_serializer(trip).data)
+
+
+class TripParticipantViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    """특정 여행에 속한 참가자 목록을 조회한다."""
+
+    serializer_class = TripParticipantSerializer
+    permission_classes = [IsAuthenticated, IsApprovedStaff]
+
+    def get_trip(self) -> Trip:
+        """NestedRouter가 전달한 trip_pk로 여행을 조회한다.
+
+        같은 요청에서 여러 번 호출되므로 `_trip_cache`에 저장해 불필요한 DB
+        조회를 줄인다.
+        """
+
+        if not hasattr(self, "_trip_cache"):
+            self._trip_cache = get_object_or_404(Trip, pk=self.kwargs["trip_pk"])
+        return self._trip_cache
+
+    def get_queryset(self):
+        """요청한 여행에 속한 참가자만 반환한다."""
+
+        trip = self.get_trip()
+        return TripParticipant.objects.filter(trip=trip).select_related("traveler")
+
+    def get_serializer_context(self):
+        """Serializer가 trip 정보를 활용할 수 있도록 context를 확장한다."""
+
+        context = super().get_serializer_context()
+        context["trip"] = self.get_trip()
+        return context
+
+    @extend_schema(
+        summary="여행 참가자 목록",
+        description="특정 여행의 모든 참가자를 반환합니다.",
+        responses={200: TripParticipantSerializer(many=True)},
+    )
+    def list(self, request, *args, **kwargs):  # type: ignore[override]
+        return super().list(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="초대코드로 여행 참가",
+        description="기존 join_trip API를 대체하는 엔드포인트입니다.",
+        responses={201: TripParticipantSerializer},
+    )
+    def create(self, request, *args, **kwargs):  # type: ignore[override]
+        """참가자를 생성한 뒤 기존 API와 유사한 메시지를 반환한다."""
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        participant = serializer.save()
+        headers = self.get_success_headers(serializer.data)
+
+        message = (
+            f"{participant.traveler.full_name_kr}님이 "
+            f"{participant.trip.title}에 참가했습니다."
         )
-
-    #해당 여행을 찾기
-    trip = get_object_or_404(Trip, id=trip_id)
-
-    #해당 여행이 담당자의 여행인지 확인
-    if request.user.role == 'manager' and trip.manager != request.user:
-        return Response(
-            {'error':'해당 여행에 접속 권한이 없습니다.'},
-            status=status.HTTP_403_FORBIDDEN
-        )
-
-    #권한이 있어서 상세 정보를 변환해야함
-    serializer = TripDetailSerializer(trip)
-
-    return Response(serializer.data)
-
-'''''
-#초대코드를 보내서 참가
-
-# ==================== 4. 초대코드로 참가 ====================
-@extend_schema(
-    summary="초대코드로 여행 참가",
-    description="초대코드를 사용해 여행에 참가자를 등록합니다.",
-    request={
-        'application/json': {
-            'type': 'object',
-            'properties': {
-                'invite_code': {'type': 'string', 'example': 'A3K9P2M1'},
-                'traveler_id': {'type': 'integer', 'example': 3}
-            },
-            'required': ['invite_code', 'traveler_id']
+        data = {
+            "message": message,
+            "participant": TripParticipantSerializer(
+                participant, context=self.get_serializer_context()
+            ).data,
         }
-    },
-    responses={201: TripParticipantSerializer}
-)
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def join_trip(request):
-    """
-    초대코드로 여행 참가 API
-    POST /api/trips/join/
+        return Response(data, status=status.HTTP_201_CREATED, headers=headers)
 
-    요청 예시:
-    {
-        "invite_code": "A3K9P2M1",
-        "traveler_id": 3
-    }
-    """
-    # 1. 승인된 직원만 등록 가능
-    if not request.user.is_approved:
-        return Response(
-            {'error': '승인되지 않은 직원입니다.'},
-            status=status.HTTP_403_FORBIDDEN
-        )
-
-    # 2. 요청 데이터 받기
-    invite_code = request.data.get('invite_code')
-    traveler_id = request.data.get('traveler_id')
-
-    if not invite_code or not traveler_id:
-        return Response(
-            {'error': 'invite_code와 traveler_id가 필요합니다.'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    # 3. 여행 찾기
-    try:
-        trip = Trip.objects.get(invite_code=invite_code)
-    except Trip.DoesNotExist:
-        return Response(
-            {'error': '유효하지 않은 초대코드입니다.'},
-            status=status.HTTP_404_NOT_FOUND
-        )
-
-    # 4. 참가자 찾기
-    try:
-        traveler = Traveler.objects.get(id=traveler_id)
-    except Traveler.DoesNotExist:
-        return Response(
-            {'error': '존재하지 않는 참가자입니다.'},
-            status=status.HTTP_404_NOT_FOUND
-        )
-
-    # 5. 중복 참가 확인
-    if TripParticipant.objects.filter(trip=trip, traveler=traveler).exists():
-        return Response(
-            {'error': '이미 참가한 여행입니다.'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    # 6. 참가 등록
-    participant = TripParticipant.objects.create(
-        trip=trip,
-        traveler=traveler
-    )
-
-    # 7. 성공 응답
-    serializer = TripParticipantSerializer(participant)
-    return Response(
-        {
-            'message': f'{traveler.full_name_kr}님이 {trip.title}에 참가했습니다.',
-            'participant': serializer.data
-        },
-        status=status.HTTP_201_CREATED
-    )
-'''''
-
-#담당자 배정
-@extend_schema(
-    summary="여행 담당자 배정",
-    description="총괄담당자만 실행 가능. 여행에 담당자를 배정합니다.",
-    request={
-        'application/json': {
-            'type': 'object',
-            'properties': {
-                'manager_id': {'type': 'integer', 'example': 2}
-            },
-            'required': ['manager_id']
-        }
-    },
-    responses={200: TripSerializer}
-)
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def assign_manager(request, trip_id):
-    """
-    담당자 배정 API
-    POST /api/trips/{trip_id}/assign-manager/
-
-    요청 예시:
-    {
-        "manager_id": 2
-    }
-    """
-    #총괄 관리자만 사용 가능하도록
-    if request.user.role != 'super_admin':
-        return Response(
-            {'error': '총괄담당자만 담당자를 배정할 수 있습니다.'},
-            status=status.HTTP_403_FORBIDDEN
-        )
-
-    #여행 찾기
-    trip = get_object_or_404(Trip, id=trip_id)
-
-    #담당자 ID
-    manager_id = request.data.get('manager_id')
-
-    if not manager_id:
-        return Response(
-            {'error':'manager_id가 필요합니다.'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    #담당자 찾기
-    try:
-        manager = User.objects.get(id=manager_id)
-    except User.DoesNotExist:
-        return Response(
-            {'error':'존재하지 않는 직원입니다.'},
-            status=status.HTTP_404_NOT_FOUND
-        )
-
-    # 5. 담당자 역할 확인
-    if manager.role != 'manager':
-        return Response(
-            {'error': '담당자 역할을 가진 직원만 배정 가능합니다.'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    # 6. 담당자 배정
-    trip.manager = manager
-    trip.save()
-
-    # 7. 성공 응답
-    serializer = TripSerializer(trip)
-    return Response({
-        'message': f'{manager.full_name_kr} 담당자를 배정했습니다.',
-        'trip': serializer.data
-    })

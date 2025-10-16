@@ -67,8 +67,11 @@ class Trip(models.Model):
     def save(self, *args, **kwargs):
         """
         저장 시 초대코드 자동 생성
+
+        초보 개발자를 위한 설명:
+        - ViewSet에서 Trip을 생성할 때는 별도로 초대코드를 만들지 않습니다.
+        - 따라서 모델 수준에서 한 번만 생성하면, CBV이든 FVB이든 항상 동일하게 동작합니다.
         """
-        # 초대코드가 없으면 자동 생성
         if not self.invite_code:
             self.invite_code = self._generate_invite_code()
 
@@ -95,9 +98,23 @@ class Trip(models.Model):
         참가자 수 반환 (property)
         나중에 TripParticipant 모델 생성 후 구현
         """
+        cache = getattr(self, "_prefetched_objects_cache", {})
+        participants = cache.get("participants")
+        if participants is not None:
+            return len(participants)
         return self.participants.count()
 
-#===========================================================
+    def assign_manager(self, manager):
+        """여행 담당자를 갱신하고 저장한다.
+
+        ViewSet의 `assign_manager` 액션에서 호출할 예정이며, 비즈니스 규칙을
+        모델 메서드로 모아 두면 관리자 페이지에서도 동일한 로직을 재사용할 수 있다.
+        """
+        self.manager = manager
+        self.save(update_fields=["manager", "updated_at"])
+
+
+
 
 class TripParticipant(models.Model):
     """

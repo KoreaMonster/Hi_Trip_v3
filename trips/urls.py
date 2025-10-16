@@ -1,16 +1,18 @@
-from django.urls import path
-from . import views
+"""trips 앱의 라우터 설정."""
 
+from rest_framework.routers import DefaultRouter
+from rest_framework_nested.routers import NestedSimpleRouter
 
-urlpatterns = [
-    #여행 목록 조회
-    path('', views.list_trips, name='list_trips'),
-    #여행을 새로 생성
-    path('create/', views.create_trip, name='create_trip'),
-    #여행 상세 조회
-    path('<int:trip_id>', views.trip_detail, name="trip_detail"),
-    #담당자 배정 - 총괄담당자만 이 역할을 수행
-    path('<int:trip_id>/assign-manager', views.assign_manager, name="assign_manager" )
-    # ==================== 초대코드 관련 (나중에 구현) ====================
-    # path('join/', views.join_trip, name='join_trip'),  # 초대코드로 참가
-]
+from .views import TripParticipantViewSet, TripViewSet
+
+router = DefaultRouter()
+router.register("trips", TripViewSet, basename="trip")
+
+trip_router = NestedSimpleRouter(router, r"trips", lookup="trip")
+trip_router.register(
+    r"participants",
+    TripParticipantViewSet,
+    basename="trip-participants",
+)
+
+urlpatterns = router.urls + trip_router.urls
