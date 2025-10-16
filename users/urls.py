@@ -1,13 +1,12 @@
 # users/urls.py
 
-from django.urls import path
-# from . import views # 나중에 views.py와 연결할 때 이 줄의 주석을 해제하세요.
 
-# Django가 이 변수를 찾습니다. 지금 당장 경로를 추가하지 않더라도
-# 비어있는 리스트 형태로 꼭 만들어 주어야 합니다.
 from django.urls import path
 from . import views
-
+# Phase 1 안내:
+#   - 이후 단계에서 DefaultRouter를 도입할 예정이라 함수형 경로는 임시 유지한다.
+#   - CBV 전환 시 이 파일이 router.register(...) 기반으로 재작성될 것임을
+#     명시적으로 알려 초보 개발자의 이해를 돕는다.
 urlpatterns = [
     path('register/', views.register, name='register'),           # 회원가입
     path('login/', views.login_view, name='login'),               # 로그인
