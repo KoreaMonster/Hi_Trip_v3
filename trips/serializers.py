@@ -26,6 +26,12 @@ class TripSerializer(serializers.ModelSerializer):
             "manager",
             "manager_name",
             "participant_count",
+            "heart_rate_min",
+            "heart_rate_max",
+            "spo2_min",
+            "geofence_center_lat",
+            "geofence_center_lng",
+            "geofence_radius_km",
             "created_at",
             "updated_at",
         ]
@@ -59,6 +65,30 @@ class TripSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "종료일은 시작일보다 빠를 수 없습니다."
             )
+        heart_rate_min = data.get("heart_rate_min")
+        heart_rate_max = data.get("heart_rate_max")
+        if (
+                heart_rate_min is not None
+                and heart_rate_max is not None
+                and heart_rate_min > heart_rate_max
+        ):
+            raise serializers.ValidationError(
+                "최소 심박수는 최대 심박수보다 작거나 같아야 합니다."
+            )
+
+        geofence_lat = data.get("geofence_center_lat")
+        geofence_lng = data.get("geofence_center_lng")
+        geofence_radius = data.get("geofence_radius_km")
+        provided = [value is not None for value in (geofence_lat, geofence_lng, geofence_radius)]
+        if any(provided):
+            if not all(provided):
+                raise serializers.ValidationError(
+                    "지오펜스를 사용하려면 위도/경도/반경을 모두 입력해야 합니다."
+                )
+            if geofence_radius is not None and geofence_radius <= 0:
+                raise serializers.ValidationError("지오펜스 반경은 0보다 커야 합니다.")
+
+        return data
 
 
 class TripParticipantSerializer(serializers.ModelSerializer):

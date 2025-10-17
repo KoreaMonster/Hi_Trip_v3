@@ -51,6 +51,8 @@ INSTALLED_APPS = [
     'schedules.apps.SchedulesConfig',
     "notices.apps.NoticesConfig",
     'locations.apps.LocationsConfig',
+    'monitoring.apps.MonitoringConfig',  # 건강/위치 모니터링 전용 앱
+
 ]
 
 MIDDLEWARE = [

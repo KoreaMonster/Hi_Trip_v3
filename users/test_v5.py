@@ -8,6 +8,13 @@ from django.db import IntegrityError
 from users.models import Traveler, User
 
 LOGGER = logging.getLogger("tests.users")
+"""미래 확장을 위한 메모
+=======================
+실제 서비스 단계에서는 User 모델에 프로필 이미지, 직통 연락처 등의 정보가
+추가될 가능성이 높습니다. 그때에는 본 테스트에 해당 필드 검증 케이스를
+추가해 데이터를 누락 없이 확인하도록 확장하면 좋습니다.
+"""
+
 
 
 USER_FULL_NAME_CASES = [
@@ -131,6 +138,58 @@ USER_FULL_NAME_CASES = [
         "role": "super_admin",
         "approved": True,
     },
+# 공백만 존재하는 입력이 들어오더라도 username으로 안전하게 대체되는지 확인합니다.
+    {
+        "id": "user_full_case_11",
+        "username_suffix": "11",
+        "first_name": " ",
+        "last_name": "Han",
+        "first_name_kr": "",
+        "last_name_kr": "한",
+        "expected_kr": "__username__",
+        "expected_en": "Han",
+        "role": "manager",
+        "approved": False,
+    },
+    # 한글 이름만 제공된 경우에도 정확한 표기가 가능한지 검증합니다.
+    {
+        "id": "user_full_case_12",
+        "username_suffix": "12",
+        "first_name": "",
+        "last_name": "",
+        "first_name_kr": "지원",
+        "last_name_kr": "문",
+        "expected_kr": "문지원",
+        "expected_en": "",
+        "role": "manager",
+        "approved": True,
+    },
+    # 영문 이름만 존재할 때 strip 결과가 예상대로 동작하는지 확인합니다.
+    {
+        "id": "user_full_case_13",
+        "username_suffix": "13",
+        "first_name": "Brian",
+        "last_name": "  Seo  ",
+        "first_name_kr": "",
+        "last_name_kr": "",
+        "expected_kr": "__username__",
+        "expected_en": "Brian   Seo",
+        "role": "super_admin",
+        "approved": True,
+    },
+    # 다국어 입력 케이스도 정합성이 있는지 확인합니다.
+    {
+        "id": "user_full_case_14",
+        "username_suffix": "14",
+        "first_name": "Laura",
+        "last_name": "Garcia",
+        "first_name_kr": "라우라",
+        "last_name_kr": "가르시아",
+        "expected_kr": "가르시아라우라",
+        "expected_en": "Laura Garcia",
+        "role": "manager",
+        "approved": False,
+    },
 ]
 
 
@@ -223,6 +282,46 @@ USER_ROLE_CASES = [
         "initial_approved": True,
         "toggle_to": True,
         "new_role": "intern",
+        "should_raise": True,
+    },
+# 승인 상태가 유지되며 역할도 동일한 경우를 점검합니다.
+    {
+        "id": "approval_case_11",
+        "username_suffix": "a11",
+        "initial_role": "manager",
+        "initial_approved": True,
+        "toggle_to": True,
+        "new_role": "manager",
+        "should_raise": False,
+    },
+    # super_admin이 비승인 상태로 전환되었다가 다시 저장되는 케이스를 확인합니다.
+    {
+        "id": "approval_case_12",
+        "username_suffix": "a12",
+        "initial_role": "super_admin",
+        "initial_approved": True,
+        "toggle_to": False,
+        "new_role": "super_admin",
+        "should_raise": False,
+    },
+    # 미승인 사용자가 승인을 받으면서 super_admin이 되는 경우를 검증합니다.
+    {
+        "id": "approval_case_13",
+        "username_suffix": "a13",
+        "initial_role": "manager",
+        "initial_approved": False,
+        "toggle_to": True,
+        "new_role": "super_admin",
+        "should_raise": False,
+    },
+    # 완전히 잘못된 역할이 입력되는 경우를 다시 확인합니다.
+    {
+        "id": "approval_case_14",
+        "username_suffix": "a14",
+        "initial_role": "manager",
+        "initial_approved": False,
+        "toggle_to": False,
+        "new_role": "director",
         "should_raise": True,
     },
 ]
@@ -325,6 +424,42 @@ TRAVELER_PAYMENT_CASES = [
         "expected_initial": False,
         "expected_after_update": False,
     },
+# 환불이 발생하여 결제 금액이 줄어드는 상황을 확인합니다.
+    {
+        "id": "payment_case_13",
+        "total": 120000,
+        "paid": 80000,
+        "increment": -20000,
+        "expected_initial": False,
+        "expected_after_update": False,
+    },
+    # 전액 결제 후 추가 결제가 들어오는 경우에도 상태가 유지되는지 확인합니다.
+    {
+        "id": "payment_case_14",
+        "total": 85000,
+        "paid": 85000,
+        "increment": 15000,
+        "expected_initial": True,
+        "expected_after_update": True,
+    },
+    # 총액이 0이라도 음수로 내려가지 않도록 방지하는 케이스입니다.
+    {
+        "id": "payment_case_15",
+        "total": 0,
+        "paid": 10000,
+        "increment": -5000,
+        "expected_initial": True,
+        "expected_after_update": True,
+    },
+    # 나눠서 결제하는 장기 여행 상품 시나리오를 추가합니다.
+    {
+        "id": "payment_case_16",
+        "total": 300000,
+        "paid": 150000,
+        "increment": 120000,
+        "expected_initial": False,
+        "expected_after_update": True,
+    },
 ]
 
 
@@ -414,6 +549,54 @@ TRAVELER_VERIFICATION_CASES = [
         "is_companion": True,
         "companion_names": "김동행",
         "proxy_booking": True,
+        "duplicate_phone": False,
+        "expect_clean_error": False,
+    },
+# 모든 검증이 False라도 연락처가 유효하면 저장 가능한지 확인합니다.
+    {
+        "id": "verification_case_09",
+        "passport_verified": False,
+        "identity_verified": False,
+        "booking_verified": False,
+        "is_companion": True,
+        "companion_names": "추가동반자",
+        "proxy_booking": True,
+        "duplicate_phone": False,
+        "expect_clean_error": False,
+    },
+    # 연락처 중복이 한 번 더 발생해도 IntegrityError가 발생하는지 확인합니다.
+    {
+        "id": "verification_case_10",
+        "passport_verified": True,
+        "identity_verified": True,
+        "booking_verified": True,
+        "is_companion": False,
+        "companion_names": "",
+        "proxy_booking": False,
+        "duplicate_phone": True,
+        "expect_clean_error": False,
+    },
+    # 동행 여부가 False인데 동행인 이름이 들어온 경우도 저장 가능해야 합니다.
+    {
+        "id": "verification_case_11",
+        "passport_verified": True,
+        "identity_verified": False,
+        "booking_verified": True,
+        "is_companion": False,
+        "companion_names": "잘못된입력",
+        "proxy_booking": False,
+        "duplicate_phone": False,
+        "expect_clean_error": False,
+    },
+    # 실제 서비스 연동 시 검증 단계가 늘어날 수 있음을 대비한 케이스입니다.
+    {
+        "id": "verification_case_12",
+        "passport_verified": True,
+        "identity_verified": True,
+        "booking_verified": True,
+        "is_companion": True,
+        "companion_names": "홍길동",
+        "proxy_booking": False,
         "duplicate_phone": False,
         "expect_clean_error": False,
     },

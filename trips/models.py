@@ -31,7 +31,51 @@ class Trip(models.Model):
         default='planning',
         verbose_name='상태'
     )
-
+    # -------- Phase2: 모니터링 임계치 (MVP 버전) --------
+    heart_rate_min = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name='최소 심박수',
+        help_text='이 값보다 낮으면 경고를 발생시킵니다. 비워두면 검사하지 않습니다.',
+    )
+    heart_rate_max = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name='최대 심박수',
+        help_text='이 값보다 높으면 경고를 발생시킵니다.',
+    )
+    spo2_min = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='최소 산소포화도',
+        help_text='산소포화도(%)가 기준보다 낮을 때 경고를 발송합니다.',
+    )
+    geofence_center_lat = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        verbose_name='지오펜스 위도',
+        help_text='지도상 기준점을 지정합니다. 비워두면 위치 경보를 끕니다.',
+    )
+    geofence_center_lng = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        verbose_name='지오펜스 경도',
+        help_text='경도 좌표.',
+    )
+    geofence_radius_km = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='허용 반경(km)',
+        help_text='참가자가 이 반경을 벗어나면 경보를 생성합니다.',
+    )
     # 초대 코드 (8자리 고유 코드)
     invite_code = models.CharField(
         max_length=8,

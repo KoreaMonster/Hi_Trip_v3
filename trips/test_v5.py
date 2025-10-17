@@ -1,5 +1,6 @@
 import logging
 from datetime import date, timedelta
+from decimal import Decimal
 import string
 
 import pytest
@@ -9,6 +10,14 @@ from trips.models import Trip, TripParticipant
 from users.models import Traveler, User
 
 LOGGER = logging.getLogger("tests.trips")
+
+
+"""향후 고도화 제안
+===================
+Trip 모델은 실시간 모니터링 외에도 여행 일정 동기화, 보험 연동 등 다양한
+확장 포인트가 있습니다. 실제 서비스 단계에서는 아래 테스트에 예약 시스템
+또는 외부 API 연계 검증을 추가하면 안정성을 더 높일 수 있습니다.
+"""
 
 
 TRIP_CREATION_CASES = []
@@ -227,6 +236,118 @@ TRIP_MANAGER_CASES = [
 ]
 
 
+TRIP_MONITORING_CASES = [
+    {
+        "id": "monitor_case_01",
+        "heart_rate_min": 55,
+        "heart_rate_max": 120,
+        "spo2_min": "94.50",
+        "geofence": ("37.566500", "126.978000"),
+        "radius": "1.50",
+        "expect_enabled": True,
+    },
+    {
+        "id": "monitor_case_02",
+        "heart_rate_min": 60,
+        "heart_rate_max": 110,
+        "spo2_min": "95.00",
+        "geofence": ("35.179554", "129.075642"),
+        "radius": "2.25",
+        "expect_enabled": True,
+    },
+    {
+        "id": "monitor_case_03",
+        "heart_rate_min": None,
+        "heart_rate_max": 130,
+        "spo2_min": None,
+        "geofence": (None, None),
+        "radius": None,
+        "expect_enabled": False,
+    },
+    {
+        "id": "monitor_case_04",
+        "heart_rate_min": 48,
+        "heart_rate_max": None,
+        "spo2_min": "92.25",
+        "geofence": ("33.499621", "126.531188"),
+        "radius": "3.75",
+        "expect_enabled": True,
+    },
+    {
+        "id": "monitor_case_05",
+        "heart_rate_min": None,
+        "heart_rate_max": None,
+        "spo2_min": "93.00",
+        "geofence": ("35.160556", "126.851667"),
+        "radius": "0.80",
+        "expect_enabled": True,
+    },
+    {
+        "id": "monitor_case_06",
+        "heart_rate_min": 50,
+        "heart_rate_max": 100,
+        "spo2_min": None,
+        "geofence": ("35.872220", "128.602500"),
+        "radius": None,
+        "expect_enabled": True,
+    },
+    {
+        "id": "monitor_case_07",
+        "heart_rate_min": 65,
+        "heart_rate_max": 150,
+        "spo2_min": "90.00",
+        "geofence": ("36.350411", "127.384548"),
+        "radius": "5.00",
+        "expect_enabled": True,
+    },
+    {
+        "id": "monitor_case_08",
+        "heart_rate_min": 58,
+        "heart_rate_max": 140,
+        "spo2_min": None,
+        "geofence": (None, None),
+        "radius": "1.00",
+        "expect_enabled": False,
+    },
+    {
+        "id": "monitor_case_09",
+        "heart_rate_min": 62,
+        "heart_rate_max": 118,
+        "spo2_min": "96.20",
+        "geofence": ("34.950000", "127.487000"),
+        "radius": "1.20",
+        "expect_enabled": True,
+    },
+    {
+        "id": "monitor_case_10",
+        "heart_rate_min": None,
+        "heart_rate_max": 125,
+        "spo2_min": None,
+        "geofence": ("38.200000", "128.516667"),
+        "radius": "2.00",
+        "expect_enabled": True,
+    },
+    {
+        "id": "monitor_case_11",
+        "heart_rate_min": 52,
+        "heart_rate_max": 105,
+        "spo2_min": "97.00",
+        "geofence": ("34.935", "127.487"),
+        "radius": None,
+        "expect_enabled": True,
+    },
+    {
+        "id": "monitor_case_12",
+        "heart_rate_min": 55,
+        "heart_rate_max": 115,
+        "spo2_min": "95.50",
+        "geofence": (None, None),
+        "radius": None,
+        "expect_enabled": True,
+    },
+]
+
+
 @pytest.mark.django_db
 @pytest.mark.parametrize("case", TRIP_CREATION_CASES, ids=lambda c: c["id"])
 def test_trip_invite_code_generation_and_uniqueness(case, trip_factory):
@@ -419,3 +540,73 @@ def test_trip_assign_manager_and_metadata(case, trip_factory):
         case["id"],
         trip_obj.manager.username if trip_obj.manager else None,
     )
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("case", TRIP_MONITORING_CASES, ids=lambda c: c["id"])
+def test_trip_monitoring_threshold_configuration(case, trip_factory):
+    logger = LOGGER.getChild("monitoring")
+    logger.info("[%s] 모니터링 임계치 설정 검증 시작", case["id"])
+
+    lat_value, lng_value = case["geofence"]
+    trip_obj = trip_factory(
+        title=f"모니터링 테스트 {case['id']}",
+        destination="모니터링도시",
+        heart_rate_min=case["heart_rate_min"],
+        heart_rate_max=case["heart_rate_max"],
+        spo2_min=Decimal(case["spo2_min"]) if case["spo2_min"] is not None else None,
+        geofence_center_lat=Decimal(lat_value) if lat_value else None,
+        geofence_center_lng=Decimal(lng_value) if lng_value else None,
+        geofence_radius_km=Decimal(case["radius"]) if case["radius"] else None,
+    )
+
+    trip_obj.refresh_from_db()
+
+    logger.info(
+        "[%s] 저장된 임계치 | hr_min=%s, hr_max=%s, spo2_min=%s, lat=%s, lng=%s, radius=%s",
+        case["id"],
+        trip_obj.heart_rate_min,
+        trip_obj.heart_rate_max,
+        trip_obj.spo2_min,
+        trip_obj.geofence_center_lat,
+        trip_obj.geofence_center_lng,
+        trip_obj.geofence_radius_km,
+    )
+
+    assert trip_obj.heart_rate_min == case["heart_rate_min"]
+    assert trip_obj.heart_rate_max == case["heart_rate_max"]
+
+    if case["spo2_min"] is None:
+        assert trip_obj.spo2_min is None
+    else:
+        assert trip_obj.spo2_min == Decimal(case["spo2_min"])
+
+    if lat_value and lng_value and case["radius"]:
+        assert trip_obj.geofence_center_lat == Decimal(lat_value)
+        assert trip_obj.geofence_center_lng == Decimal(lng_value)
+        assert trip_obj.geofence_radius_km == Decimal(case["radius"])
+    else:
+        assert trip_obj.geofence_radius_km == (
+            Decimal(case["radius"]) if case["radius"] else None
+        )
+
+    has_geofence = all(
+        value is not None
+        for value in [
+            trip_obj.geofence_center_lat,
+            trip_obj.geofence_center_lng,
+            trip_obj.geofence_radius_km,
+        ]
+    )
+
+    logger.info(
+        "[%s] 지오펜스 활성화 여부=%s (기대값=%s)",
+        case["id"],
+        has_geofence,
+        case["expect_enabled"],
+    )
+
+    if case["radius"]:
+        assert has_geofence is case["expect_enabled"]
+    else:
+        assert has_geofence is False
