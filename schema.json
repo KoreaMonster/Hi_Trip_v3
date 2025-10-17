@@ -3233,12 +3233,12 @@
                     "last_name_kr": {
                         "type": "string",
                         "title": "한글 성",
-                        "maxLength": 10
+                        "maxLength": 20
                     },
                     "first_name_kr": {
                         "type": "string",
                         "title": "한글 이름",
-                        "maxLength": 10
+                        "maxLength": 20
                     },
                     "full_name_kr": {
                         "type": "string",
@@ -3630,12 +3630,12 @@
                     "first_name_kr": {
                         "type": "string",
                         "title": "한글 이름",
-                        "maxLength": 10
+                        "maxLength": 20
                     },
                     "last_name_kr": {
                         "type": "string",
                         "title": "한글 성",
-                        "maxLength": 10
+                        "maxLength": 20
                     },
                     "full_name_kr": {
                         "type": "string",

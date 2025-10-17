@@ -39,8 +39,8 @@ class User(FullNameMixin, AbstractUser):
         ('super_admin', '총괄담당자'),
         ('manager', '담당자'),
     ]
-    first_name_kr = models.CharField(max_length=10, blank=True, verbose_name='한글 이름')
-    last_name_kr = models.CharField(max_length=10, blank=True, verbose_name='한글 성')
+    first_name_kr = models.CharField(max_length=20, blank=True, verbose_name='한글 이름')
+    last_name_kr = models.CharField(max_length=20, blank=True, verbose_name='한글 성')
 
     phone = models.CharField(max_length=20, blank=True, verbose_name='연락처')
 
@@ -72,8 +72,8 @@ class Traveler(FullNameMixin, models.Model):
     ]
 
     # 기본 정보
-    last_name_kr = models.CharField(max_length=10, verbose_name='한글 성')  # 2. '성' 필드 추가
-    first_name_kr = models.CharField(max_length=10, verbose_name='한글 이름')
+    last_name_kr = models.CharField(max_length=20, verbose_name='한글 성')  # 2. '성' 필드 추가
+    first_name_kr = models.CharField(max_length=20, verbose_name='한글 이름')
     first_name_en = models.CharField(max_length=50, blank=True, verbose_name='영문 First Name')
     last_name_en = models.CharField(max_length=50, blank=True, verbose_name='영문 Last Name')
     birth_date = models.DateField(verbose_name='생년월일')

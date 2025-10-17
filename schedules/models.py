@@ -135,7 +135,7 @@ class Schedule(models.Model):
                 })
 
         # day_number가 양수인지 검증
-        if self.day_number and self.day_number < 1:
+        if self.day_number is not None and self.day_number < 1:
             raise ValidationError({
                 'day_number': '일차는 1 이상이어야 합니다.'
             })
