@@ -454,9 +454,9 @@ TRAVELER_PAYMENT_CASES = [
     # 나눠서 결제하는 장기 여행 상품 시나리오를 추가합니다.
     {
         "id": "payment_case_16",
-        "total": 300000,
+        "total": 310000,
         "paid": 150000,
-        "increment": 120000,
+        "increment": 160000,
         "expected_initial": False,
         "expected_after_update": True,
     },

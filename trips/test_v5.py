@@ -440,7 +440,7 @@ def test_trip_participant_management_scenarios(case, trip_factory):
     for idx in range(case["participant_count"]):
         traveler = Traveler.objects.create(
             last_name_kr="참가",
-            first_name_kr=f"사용자{case['id']}_{idx}",
+            first_name_kr=f"{case['id']}_{idx}",
             first_name_en="Participant",
             last_name_en="Tester",
             birth_date=date(1990, 1, 1) + timedelta(days=idx),
