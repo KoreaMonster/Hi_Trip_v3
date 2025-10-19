@@ -77,7 +77,9 @@ class PlaceAdmin(admin.ModelAdmin):
             'classes': ('collapse',),
         }),
     )
-    
+
+
+
 @admin.register(OptionalExpense)
 class OptionalExpenseAdmin(admin.ModelAdmin):
     """(직접 관리용) 선택적 지출 항목 관리자 페이지"""

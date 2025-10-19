@@ -3,8 +3,9 @@
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status, viewsets
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from trips.models import Trip
 from users.permissions import IsApprovedStaff
@@ -20,6 +21,26 @@ from .serializers import (
 from .services import get_participant_statuses
 
 
+# ✅ 간단한 함수 기반 뷰 (추천)
+@api_view(['GET', 'HEAD'])
+@permission_classes([permissions.AllowAny])
+def health_check(request):
+    """
+    로드밸런서 및 외부 모니터링 툴을 위한 헬스 체크.
+
+    - GET: JSON 응답 반환
+    - HEAD: 204 No Content 반환 (부하분산기용)
+    """
+    if request.method == 'HEAD':
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    return Response({
+        'status': 'ok',
+        'message': 'Backend is running',
+        'service': 'Hi Trip API'
+    }, status=status.HTTP_200_OK)
+
+
 class TripMonitoringViewSet(viewsets.ViewSet):
     """특정 여행에 대한 모니터링 데이터를 제공한다."""
 
@@ -27,7 +48,6 @@ class TripMonitoringViewSet(viewsets.ViewSet):
 
     def get_trip(self, pk: int) -> Trip:
         """중복 코드를 줄이기 위한 Trip 조회 헬퍼."""
-
         return get_object_or_404(Trip, pk=pk)
 
     @extend_schema(
@@ -52,55 +72,24 @@ class TripMonitoringViewSet(viewsets.ViewSet):
                 if status_obj.location
                 else None
             )
-            payload.append(
-                {
-                    "participant_id": status_obj.participant.id,
-                    "traveler_name": status_obj.participant.traveler.full_name_kr,
-                    "trip_id": status_obj.participant.trip_id,
-                    "health": health_data,
-                    "location": location_data,
-                }
-            )
+
+            payload.append({
+                'participant': status_obj.participant,
+                'health': health_data,
+                'location': location_data,
+            })
 
         serializer = ParticipantLatestSerializer(payload, many=True)
-        return Response(serializer.data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @extend_schema(
-        summary="경고 이력 조회",
-        description="최근 생성된 모니터링 경고를 시간순으로 반환합니다.",
+        summary="여행 알림 목록",
+        description="특정 여행에 대한 모니터링 알림 목록을 조회합니다.",
         responses={200: MonitoringAlertSerializer(many=True)},
     )
     @action(detail=True, methods=["get"], url_path="alerts")
     def alerts(self, request, pk=None):
         trip = self.get_trip(pk)
-        alerts = (
-            MonitoringAlert.objects.filter(participant__trip=trip)
-            .select_related("participant__traveler")
-            .order_by("-created_at")[:100]
-        )
+        alerts = MonitoringAlert.objects.filter(trip=trip).order_by('-created_at')
         serializer = MonitoringAlertSerializer(alerts, many=True)
-        return Response(serializer.data)
-
-    @extend_schema(
-        summary="데모 데이터 생성",
-        description="프런트엔드 없이도 API 호출만으로 더미 스냅샷을 만들 수 있는 보조 액션.",
-        request=DemoGenerationSerializer,
-        responses={201: None},
-    )
-    @action(detail=True, methods=["post"], url_path="generate-demo")
-    def generate_demo(self, request, pk=None):
-        trip = self.get_trip(pk)
-        serializer = DemoGenerationSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        created = serializer.generate(trip)
-        return Response(
-            {
-                "created": created,
-                "message": f"{created}개의 스냅샷을 생성했습니다.",
-            },
-            status=status.HTTP_201_CREATED,
-        )
-
-    # 향후 개선 계획:
-    # - latest/alerts 응답에 pagination을 적용하면 참가자 수가 많아져도 응답이 가벼워집니다.
-    # - WebSocket/SSE 연동 시에는 여기에서 채널 그룹에 메시지를 발송하도록 확장합니다.
+        return Response(serializer.data, status=status.HTTP_200_OK)
