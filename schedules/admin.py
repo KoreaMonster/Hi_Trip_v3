@@ -47,33 +47,37 @@ class PlaceCategoryAdmin(admin.ModelAdmin):
 @admin.register(Place)
 class PlaceAdmin(admin.ModelAdmin):
     """장소 관리자 페이지"""
-    list_display = ('name', 'category', 'address', 'entrance_fee_display', 'activity_time_display')
+
+    # Google 연동 필드를 포함한 주요 정보를 목록에서 바로 확인할 수 있도록 열 구성을 확장합니다.
+    list_display = (
+        'name',
+        'category',
+        'address',
+        'google_place_id',
+        'latitude',
+        'longitude',
+        'google_synced_at',
+        'entrance_fee_display',
+        'activity_time_display',
+    )
     list_filter = ('category',)
-    search_fields = ('name', 'address')
+    search_fields = ('name', 'address', 'google_place_id')
+    readonly_fields = ('google_synced_at',)
     inlines = [PlaceCoordinatorInline, OptionalExpenseInline]  # 담당자 및 비용 항목 인라인 추가
 
     fieldsets = (
         ("기본 정보", {'fields': ('name', 'category', 'address', 'image')}),
+        ("Google 연동 정보", {
+            'fields': ('google_place_id', 'latitude', 'longitude', 'google_synced_at'),
+            'description': '외부 API로 자동 채워지는 식별자/좌표입니다. 수동 수정 없이 참고용으로 사용하세요.',
+        }),
         ("운영 정보", {'fields': ('entrance_fee', 'activity_time')}),
-        ("AI 추천 정보", {'fields': ('ai_alternative_place', 'ai_generated_info', 'ai_meeting_point'), 'classes': ('collapse',)}),
+        ("AI 추천 정보", {
+            'fields': ('ai_alternative_place', 'ai_generated_info', 'ai_meeting_point'),
+            'classes': ('collapse',),
+        }),
     )
-
-
-@admin.register(CoordinatorRole)
-class CoordinatorRoleAdmin(admin.ModelAdmin):
-    """담당자 역할 관리자 페이지"""
-    list_display = ('name', 'description')
-    search_fields = ('name',)
-
-
-@admin.register(PlaceCoordinator)
-class PlaceCoordinatorAdmin(admin.ModelAdmin):
-    """(직접 관리용) 장소 담당자 관리자 페이지"""
-    list_display = ('place', 'role', 'name', 'phone')
-    list_filter = ('role', 'place')
-    search_fields = ('name', 'phone', 'place__name')
-
-
+    
 @admin.register(OptionalExpense)
 class OptionalExpenseAdmin(admin.ModelAdmin):
     """(직접 관리용) 선택적 지출 항목 관리자 페이지"""
