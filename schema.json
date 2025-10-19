@@ -727,6 +727,97 @@
                 }
             }
         },
+        "/api/place-recommendations/alternatives/": {
+            "post": {
+                "operationId": "api_place_recommendations_alternatives_create",
+                "description": "이전(A)·현재(X)·다음(Y) 장소를 입력받아 ΔETA가 가장 적은 후보를 반환합니다.",
+                "summary": "동일 카테고리 내 대체 장소 추천",
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AlternativePlaceRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AlternativePlaceRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AlternativePlaceRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "No response body"
+                    },
+                    "400": {
+                        "description": "No response body"
+                    },
+                    "502": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/place-recommendations/fixed-top/": {
+            "post": {
+                "operationId": "api_place_recommendations_fixed_top_create",
+                "description": "여행 중심 좌표를 기준으로 고정된 5개 카테고리를 검색합니다.",
+                "summary": "고정 5개 카테고리의 상위 장소 추천",
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/FixedRecommendationRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/FixedRecommendationRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/FixedRecommendationRequest"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "No response body"
+                    },
+                    "400": {
+                        "description": "No response body"
+                    },
+                    "502": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
         "/api/places/": {
             "get": {
                 "operationId": "api_places_list",
@@ -2349,6 +2440,67 @@
                     }
                 }
             }
+        },
+        "/api/trips/{trip_pk}/schedules/rebalance-day/": {
+            "post": {
+                "operationId": "api_trips_schedules_rebalance_day_create",
+                "description": "Drag&Drop 이후 하루 일정을 자동으로 다시 배치합니다.\n\n1. 요청으로 전달된 Schedule ID 순서를 신뢰하여 `order` 값을 새로 지정합니다.\n2. 각 일정의 체류 시간(Place.activity_time → 기존 duration → 기본값)을 기준으로\n   `start_time`과 `end_time`을 다시 계산합니다.\n3. 인접한 일정 사이의 이동 시간은 Google Routes API로 계산하되,\n   좌표/Place ID가 없는 경우에는 0분으로 간주합니다.\n4. 모든 계산이 끝나면 최신 Schedule 목록과 이동 요약 정보를 반환합니다.",
+                "summary": "하루 일정 자동 시간 재배치",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "trip_pk",
+                        "schema": {
+                            "type": "integer",
+                            "title": "여행"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ScheduleRebalanceRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ScheduleRebalanceRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ScheduleRebalanceRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/Schedule"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -2360,6 +2512,38 @@
                 ],
                 "type": "string",
                 "description": "* `health` - 건강 이상\n* `location` - 위치 이탈"
+            },
+            "AlternativePlaceRequest": {
+                "type": "object",
+                "description": "대체 장소 추천 API 입력을 검증합니다.",
+                "properties": {
+                    "previous_place_id": {
+                        "type": "string",
+                        "description": "이전 일정의 Google Place ID (A)"
+                    },
+                    "unavailable_place_id": {
+                        "type": "string",
+                        "description": "방문 불가한 장소의 Google Place ID (X)"
+                    },
+                    "next_place_id": {
+                        "type": "string",
+                        "description": "다음 일정의 Google Place ID (Y)"
+                    },
+                    "travel_mode": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/TravelModeEnum"
+                            }
+                        ],
+                        "description": "Routes API에 전달할 이동 수단\n\n* `DRIVE` - DRIVE\n* `WALK` - WALK\n* `BICYCLE` - BICYCLE\n* `TRANSIT` - TRANSIT"
+                    }
+                },
+                "required": [
+                    "next_place_id",
+                    "previous_place_id",
+                    "travel_mode",
+                    "unavailable_place_id"
+                ]
             },
             "AssignManager": {
                 "type": "object",
@@ -2443,6 +2627,26 @@
                 "required": [
                     "expense_ids"
                 ]
+            },
+            "FixedRecommendationRequest": {
+                "type": "object",
+                "description": "고정 5개 카테고리 추천 API 입력 검증 전용 Serializer.",
+                "properties": {
+                    "address": {
+                        "type": "string",
+                        "description": "여행 중심지 주소. 주소만 전달되면 서버가 Geocoding API로 위경도를 구합니다."
+                    },
+                    "latitude": {
+                        "type": "number",
+                        "format": "double",
+                        "description": "여행 중심지 위도 (address를 생략한 경우 필수)"
+                    },
+                    "longitude": {
+                        "type": "number",
+                        "format": "double",
+                        "description": "여행 중심지 경도 (address를 생략한 경우 필수)"
+                    }
+                }
             },
             "GenderEnum": {
                 "enum": [
@@ -3605,6 +3809,43 @@
                     "updated_at"
                 ]
             },
+            "ScheduleRebalanceRequest": {
+                "type": "object",
+                "description": "하루 일정 재배치 요청을 검증하는 Serializer.",
+                "properties": {
+                    "day_number": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "재배치할 여행 일차 (1일부터 시작)"
+                    },
+                    "schedule_ids": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "description": "새 순서대로 정렬된 Schedule ID 목록"
+                    },
+                    "travel_mode": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/TravelModeEnum"
+                            }
+                        ],
+                        "description": "이동 시간 계산에 사용할 이동 수단\n\n* `DRIVE` - DRIVE\n* `WALK` - WALK\n* `BICYCLE` - BICYCLE\n* `TRANSIT` - TRANSIT"
+                    },
+                    "day_start_time": {
+                        "type": "string",
+                        "format": "time",
+                        "description": "일정 시작 기준 시각 (미입력 시 서버가 기존 일정의 가장 이른 시간을 사용)"
+                    }
+                },
+                "required": [
+                    "day_number",
+                    "schedule_ids",
+                    "travel_mode"
+                ]
+            },
             "StatusEnum": {
                 "enum": [
                     "planning",
@@ -3613,6 +3854,16 @@
                 ],
                 "type": "string",
                 "description": "* `planning` - 계획 중\n* `ongoing` - 진행 중\n* `completed` - 완료"
+            },
+            "TravelModeEnum": {
+                "enum": [
+                    "DRIVE",
+                    "WALK",
+                    "BICYCLE",
+                    "TRANSIT"
+                ],
+                "type": "string",
+                "description": "* `DRIVE` - DRIVE\n* `WALK` - WALK\n* `BICYCLE` - BICYCLE\n* `TRANSIT` - TRANSIT"
             },
             "Traveler": {
                 "type": "object",
