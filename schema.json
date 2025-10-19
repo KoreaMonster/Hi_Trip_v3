@@ -598,6 +598,135 @@
                 }
             }
         },
+        "/api/monitoring/trips/{id}/alerts/": {
+            "get": {
+                "operationId": "api_monitoring_trips_alerts_list",
+                "description": "최근 생성된 모니터링 경고를 시간순으로 반환합니다.",
+                "summary": "경고 이력 조회",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/MonitoringAlert"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/monitoring/trips/{id}/generate-demo/": {
+            "post": {
+                "operationId": "api_monitoring_trips_generate_demo_create",
+                "description": "프런트엔드 없이도 API 호출만으로 더미 스냅샷을 만들 수 있는 보조 액션.",
+                "summary": "데모 데이터 생성",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DemoGeneration"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DemoGeneration"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DemoGeneration"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/monitoring/trips/{id}/latest/": {
+            "get": {
+                "operationId": "api_monitoring_trips_latest_list",
+                "description": "여행 참가자별 가장 최근의 HealthSnapshot과 LocationSnapshot을 반환합니다.",
+                "summary": "참가자 최신 건강/위치 상태",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/ParticipantLatest"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/places/": {
             "get": {
                 "operationId": "api_places_list",
@@ -2224,6 +2353,14 @@
     },
     "components": {
         "schemas": {
+            "AlertTypeEnum": {
+                "enum": [
+                    "health",
+                    "location"
+                ],
+                "type": "string",
+                "description": "* `health` - 건강 이상\n* `location` - 위치 이탈"
+            },
             "AssignManager": {
                 "type": "object",
                 "description": "총괄담당자가 여행 담당자를 교체할 때 사용하는 전용 Serializer.",
@@ -2270,6 +2407,26 @@
                     "name"
                 ]
             },
+            "DemoGeneration": {
+                "type": "object",
+                "description": "데모 데이터를 API로 생성할 때 사용할 옵션.",
+                "properties": {
+                    "minutes": {
+                        "type": "integer",
+                        "maximum": 60,
+                        "minimum": 1,
+                        "default": 10,
+                        "description": "몇 분 분량의 데이터를 생성할지 설정합니다 (기본 10분)."
+                    },
+                    "interval": {
+                        "type": "integer",
+                        "maximum": 600,
+                        "minimum": 10,
+                        "default": 60,
+                        "description": "측정 간격(초). 기본값은 60초입니다."
+                    }
+                }
+            },
             "ExpenseSelection": {
                 "type": "object",
                 "description": "선택한 선택 비용 ID 목록을 검증하는 전용 Serializer.\n\n기존 함수형 뷰에서는 단순 리스트 검증만 수행했지만, Serializer로 분리하면\nViewSet 액션에서도 재사용할 수 있고, 스웨거 문서에도 자동으로 노출됩니다.",
@@ -2295,6 +2452,91 @@
                 "type": "string",
                 "description": "* `M` - 남\n* `F` - 여"
             },
+            "HealthSnapshot": {
+                "type": "object",
+                "description": "HealthSnapshot을 읽기 전용으로 노출한다.",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "measured_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true,
+                        "description": "데이터가 측정된 시각 (UTC 기준으로 저장)."
+                    },
+                    "heart_rate": {
+                        "type": "integer",
+                        "readOnly": true,
+                        "description": "분당 심박수. 보통 40~180 사이의 값을 예상합니다."
+                    },
+                    "spo2": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,3}(?:\\.\\d{0,2})?$",
+                        "readOnly": true,
+                        "description": "산소포화도(%). 소수점 둘째 자리까지 보관합니다."
+                    },
+                    "status": {
+                        "type": "string",
+                        "readOnly": true,
+                        "description": "서버에서 판정한 상태값 (예: normal, caution, danger)."
+                    }
+                },
+                "required": [
+                    "heart_rate",
+                    "id",
+                    "measured_at",
+                    "spo2",
+                    "status"
+                ]
+            },
+            "LocationSnapshot": {
+                "type": "object",
+                "description": "LocationSnapshot을 읽기 전용으로 직렬화.",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "measured_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true,
+                        "description": "위치가 기록된 시각."
+                    },
+                    "latitude": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,3}(?:\\.\\d{0,6})?$",
+                        "readOnly": true,
+                        "description": "위도. 소수점 6자리면 약 0.11m 해상도를 제공합니다."
+                    },
+                    "longitude": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,3}(?:\\.\\d{0,6})?$",
+                        "readOnly": true,
+                        "description": "경도. 소수점 6자리로 대부분의 도시 지역을 커버합니다."
+                    },
+                    "accuracy_m": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,4}(?:\\.\\d{0,2})?$",
+                        "readOnly": true,
+                        "nullable": true,
+                        "description": "위치 정확도(미터). 없으면 기기에서 값을 주지 않은 것입니다."
+                    }
+                },
+                "required": [
+                    "accuracy_m",
+                    "id",
+                    "latitude",
+                    "longitude",
+                    "measured_at"
+                ]
+            },
             "Login": {
                 "type": "object",
                 "description": "로그인 요청 검증",
@@ -2310,6 +2552,65 @@
                 "required": [
                     "password",
                     "username"
+                ]
+            },
+            "MonitoringAlert": {
+                "type": "object",
+                "description": "경고 이력을 간단히 반환하기 위한 Serializer.",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "participant": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "traveler_name": {
+                        "type": "string",
+                        "description": "관리자 화면에서 참가자를 바로 식별하도록 이름을 제공합니다.",
+                        "readOnly": true
+                    },
+                    "trip_id": {
+                        "type": "integer",
+                        "description": "프런트에서 trip 필터링을 쉽게 하도록 Trip ID를 노출.",
+                        "readOnly": true
+                    },
+                    "alert_type": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/AlertTypeEnum"
+                            }
+                        ],
+                        "readOnly": true,
+                        "description": "경보 분류 (건강/위치).\n\n* `health` - 건강 이상\n* `location` - 위치 이탈"
+                    },
+                    "message": {
+                        "type": "string",
+                        "readOnly": true,
+                        "description": "관리자에게 보여줄 경보 요약 메시지."
+                    },
+                    "snapshot_time": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true,
+                        "description": "경보 판단에 사용한 측정 시각."
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "alert_type",
+                    "created_at",
+                    "id",
+                    "message",
+                    "participant",
+                    "snapshot_time",
+                    "traveler_name",
+                    "trip_id"
                 ]
             },
             "OptionalExpense": {
@@ -2384,6 +2685,49 @@
                     "price",
                     "price_display",
                     "updated_at"
+                ]
+            },
+            "ParticipantLatest": {
+                "type": "object",
+                "description": "참가자별 최신 건강/위치 상태를 묶어서 반환한다.",
+                "properties": {
+                    "participant_id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "traveler_name": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "trip_id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "health": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/HealthSnapshot"
+                            }
+                        ],
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "location": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/LocationSnapshot"
+                            }
+                        ],
+                        "readOnly": true,
+                        "nullable": true
+                    }
+                },
+                "required": [
+                    "health",
+                    "location",
+                    "participant_id",
+                    "traveler_name",
+                    "trip_id"
                 ]
             },
             "PatchedOptionalExpense": {
@@ -2779,6 +3123,54 @@
                     "participant_count": {
                         "type": "integer",
                         "readOnly": true
+                    },
+                    "heart_rate_min": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0,
+                        "nullable": true,
+                        "title": "최소 심박수",
+                        "description": "이 값보다 낮으면 경고를 발생시킵니다. 비워두면 검사하지 않습니다."
+                    },
+                    "heart_rate_max": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0,
+                        "nullable": true,
+                        "title": "최대 심박수",
+                        "description": "이 값보다 높으면 경고를 발생시킵니다."
+                    },
+                    "spo2_min": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,3}(?:\\.\\d{0,2})?$",
+                        "nullable": true,
+                        "title": "최소 산소포화도",
+                        "description": "산소포화도(%)가 기준보다 낮을 때 경고를 발송합니다."
+                    },
+                    "geofence_center_lat": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,3}(?:\\.\\d{0,6})?$",
+                        "nullable": true,
+                        "title": "지오펜스 위도",
+                        "description": "지도상 기준점을 지정합니다. 비워두면 위치 경보를 끕니다."
+                    },
+                    "geofence_center_lng": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,3}(?:\\.\\d{0,6})?$",
+                        "nullable": true,
+                        "title": "지오펜스 경도",
+                        "description": "경도 좌표."
+                    },
+                    "geofence_radius_km": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,3}(?:\\.\\d{0,2})?$",
+                        "nullable": true,
+                        "title": "허용 반경(km)",
+                        "description": "참가자가 이 반경을 벗어나면 경보를 생성합니다."
                     },
                     "created_at": {
                         "type": "string",
@@ -3345,6 +3737,54 @@
                         "type": "integer",
                         "readOnly": true
                     },
+                    "heart_rate_min": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0,
+                        "nullable": true,
+                        "title": "최소 심박수",
+                        "description": "이 값보다 낮으면 경고를 발생시킵니다. 비워두면 검사하지 않습니다."
+                    },
+                    "heart_rate_max": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0,
+                        "nullable": true,
+                        "title": "최대 심박수",
+                        "description": "이 값보다 높으면 경고를 발생시킵니다."
+                    },
+                    "spo2_min": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,3}(?:\\.\\d{0,2})?$",
+                        "nullable": true,
+                        "title": "최소 산소포화도",
+                        "description": "산소포화도(%)가 기준보다 낮을 때 경고를 발송합니다."
+                    },
+                    "geofence_center_lat": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,3}(?:\\.\\d{0,6})?$",
+                        "nullable": true,
+                        "title": "지오펜스 위도",
+                        "description": "지도상 기준점을 지정합니다. 비워두면 위치 경보를 끕니다."
+                    },
+                    "geofence_center_lng": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,3}(?:\\.\\d{0,6})?$",
+                        "nullable": true,
+                        "title": "지오펜스 경도",
+                        "description": "경도 좌표."
+                    },
+                    "geofence_radius_km": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,3}(?:\\.\\d{0,2})?$",
+                        "nullable": true,
+                        "title": "허용 반경(km)",
+                        "description": "참가자가 이 반경을 벗어나면 경보를 생성합니다."
+                    },
                     "created_at": {
                         "type": "string",
                         "format": "date-time",
@@ -3426,6 +3866,54 @@
                     "participant_count": {
                         "type": "integer",
                         "readOnly": true
+                    },
+                    "heart_rate_min": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0,
+                        "nullable": true,
+                        "title": "최소 심박수",
+                        "description": "이 값보다 낮으면 경고를 발생시킵니다. 비워두면 검사하지 않습니다."
+                    },
+                    "heart_rate_max": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0,
+                        "nullable": true,
+                        "title": "최대 심박수",
+                        "description": "이 값보다 높으면 경고를 발생시킵니다."
+                    },
+                    "spo2_min": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,3}(?:\\.\\d{0,2})?$",
+                        "nullable": true,
+                        "title": "최소 산소포화도",
+                        "description": "산소포화도(%)가 기준보다 낮을 때 경고를 발송합니다."
+                    },
+                    "geofence_center_lat": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,3}(?:\\.\\d{0,6})?$",
+                        "nullable": true,
+                        "title": "지오펜스 위도",
+                        "description": "지도상 기준점을 지정합니다. 비워두면 위치 경보를 끕니다."
+                    },
+                    "geofence_center_lng": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,3}(?:\\.\\d{0,6})?$",
+                        "nullable": true,
+                        "title": "지오펜스 경도",
+                        "description": "경도 좌표."
+                    },
+                    "geofence_radius_km": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,3}(?:\\.\\d{0,2})?$",
+                        "nullable": true,
+                        "title": "허용 반경(km)",
+                        "description": "참가자가 이 반경을 벗어나면 경보를 생성합니다."
                     },
                     "created_at": {
                         "type": "string",

@@ -1,6 +1,8 @@
 """Schedules 앱에서 사용할 Serializer 정의."""
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
+
+from .constants import FIXED_RECOMMENDATION_PLACE_TYPES, SUPPORTED_TRAVEL_MODES
 from .models import (
     Schedule,
     Place,
@@ -532,3 +534,116 @@ class ExpenseSelectionSerializer(serializers.Serializer):
         allow_empty=False,
         help_text="합산할 OptionalExpense의 ID 목록",
     )
+
+
+class FixedRecommendationRequestSerializer(serializers.Serializer):
+    """고정 5개 카테고리 추천 API 입력 검증 전용 Serializer."""
+
+    # 주소 문자열만 전달받은 경우 → 내부에서 Geocoding API 호출.
+    address = serializers.CharField(
+        required=False,
+        allow_blank=False,
+        help_text="여행 중심지 주소. 주소만 전달되면 서버가 Geocoding API로 위경도를 구합니다.",
+    )
+    # 이미 위경도를 알고 있다면 address 없이 latitude/longitude만 전달할 수 있습니다.
+    latitude = serializers.FloatField(
+        required=False,
+        help_text="여행 중심지 위도 (address를 생략한 경우 필수)",
+    )
+    longitude = serializers.FloatField(
+        required=False,
+        help_text="여행 중심지 경도 (address를 생략한 경우 필수)",
+    )
+
+    def validate(self, attrs):
+        """주소 또는 위경도 중 최소 한 가지는 반드시 입력되도록 보장합니다."""
+
+        address = attrs.get("address")
+        latitude = attrs.get("latitude")
+        longitude = attrs.get("longitude")
+
+        # 1) 주소가 없는 경우 → 위경도 모두 존재해야 한다.
+        if not address:
+            if latitude is None or longitude is None:
+                raise serializers.ValidationError(
+                    "주소가 없다면 latitude/longitude를 모두 전달해야 합니다."
+                )
+        # 2) 주소와 위경도가 동시에 들어온 경우는 허용하지만, 추후 로깅을 위해 그대로 유지.
+        #    (실제 구현 단계에서 우선 순위를 정하기 쉽도록 그대로 attrs 반환)
+        return attrs
+
+    @property
+    def fixed_categories(self):
+        """뷰 로직에서 상수 목록을 재활용할 수 있도록 helper 프로퍼티를 제공합니다."""
+
+        return FIXED_RECOMMENDATION_PLACE_TYPES
+
+class AlternativePlaceRequestSerializer(serializers.Serializer):
+    """대체 장소 추천 API 입력을 검증합니다."""
+
+    previous_place_id = serializers.CharField(
+        help_text="이전 일정의 Google Place ID (A)",
+    )
+    unavailable_place_id = serializers.CharField(
+        help_text="방문 불가한 장소의 Google Place ID (X)",
+    )
+    next_place_id = serializers.CharField(
+        help_text="다음 일정의 Google Place ID (Y)",
+    )
+    travel_mode = serializers.ChoiceField(
+        choices=SUPPORTED_TRAVEL_MODES,
+        help_text="Routes API에 전달할 이동 수단",
+    )
+
+    def validate(self, attrs):
+        """입력된 Place ID가 모두 서로 다른지 확인합니다."""
+
+        ids = {
+            attrs.get("previous_place_id"),
+            attrs.get("unavailable_place_id"),
+            attrs.get("next_place_id"),
+        }
+        if None in ids:
+            # 개별 필드 검증이 이미 수행되지만, 안전 차원에서 다시 확인
+            raise serializers.ValidationError("Place ID는 모두 필수입니다.")
+
+        if len(ids) != 3:
+            raise serializers.ValidationError(
+                "이전/현재/다음 장소의 Place ID는 서로 달라야 합니다."
+            )
+        return attrs
+
+class ScheduleRebalanceRequestSerializer(serializers.Serializer):
+    """하루 일정 재배치 요청을 검증하는 Serializer."""
+
+    day_number = serializers.IntegerField(
+        min_value=1,
+        help_text="재배치할 여행 일차 (1일부터 시작)",
+    )
+    schedule_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        allow_empty=False,
+        help_text="새 순서대로 정렬된 Schedule ID 목록",
+    )
+    travel_mode = serializers.ChoiceField(
+        choices=SUPPORTED_TRAVEL_MODES,
+        help_text="이동 시간 계산에 사용할 이동 수단",
+    )
+    day_start_time = serializers.TimeField(
+        required=False,
+        help_text="일정 시작 기준 시각 (미입력 시 서버가 기존 일정의 가장 이른 시간을 사용)",
+    )
+
+    def validate_schedule_ids(self, value):
+        """중복 Schedule ID가 들어오지 않도록 검증합니다."""
+
+        if len(set(value)) != len(value):
+            raise serializers.ValidationError("schedule_ids에 중복이 포함되어 있습니다.")
+        return value
+
+    def validate(self, attrs):
+        """일차(day_number)와 일정 ID 목록이 비어 있지 않은지 최종 확인."""
+
+        if not attrs.get("schedule_ids"):
+            raise serializers.ValidationError("재배치할 일정 목록이 비어 있습니다.")
+        return attrs

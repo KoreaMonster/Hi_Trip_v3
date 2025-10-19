@@ -1,6 +1,6 @@
 from django.db import models
 from django.core.exceptions import ValidationError
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 
 class Schedule(models.Model):
@@ -269,7 +269,39 @@ class Place(models.Model):
         verbose_name="주소",
         help_text='예: 서울특별시 종로구 사직로'
     )
+    # ========== Google Maps 연동 기본 정보 ==========
+    google_place_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        verbose_name='Google Place ID',
+        help_text='Places API에서 제공하는 고유 식별자. 추후 API 재호출 시 재사용합니다.'
+    )
 
+    latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        verbose_name='위도',
+        help_text='Geocoding API 또는 Places API 응답에서 받아온 위도 값 (예: 37.579621)'
+    )
+
+    longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        verbose_name='경도',
+        help_text='Geocoding API 또는 Places API 응답에서 받아온 경도 값 (예: 126.977041)'
+    )
+
+    google_synced_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Google 데이터 동기화 시각',
+        help_text='외부 API와 마지막으로 동기화한 일시를 저장하여 재호출 주기를 관리합니다.'
+    )
     category = models.ForeignKey(
         PlaceCategory,
         on_delete=models.SET_NULL,  # 카테고리 삭제 시 장소는 유지
@@ -432,7 +464,61 @@ class Place(models.Model):
             'place_name': self.ai_alternative_place.get('place_name', '정보 없음'),
             'reason': self.ai_alternative_place.get('reason', '정보 없음')
         }
+class GoogleApiCache(models.Model):
+    """외부 Google API 응답을 재사용하기 위한 간단한 캐시 테이블"""
 
+    service_name = models.CharField(
+        max_length=100,
+        verbose_name='사용 API 구분',
+        help_text='예: geocoding, places_nearby, place_details, routes'
+    )
+
+    request_hash = models.CharField(
+        max_length=64,
+        verbose_name='요청 식별 해시',
+        help_text='요청 파라미터를 직렬화한 뒤 해시한 값. 동일 요청이면 캐시를 재사용합니다.'
+    )
+
+    response_data = models.JSONField(
+        verbose_name='응답 원본 데이터',
+        help_text='Google API에서 받은 응답 전문(JSON)을 그대로 저장해둡니다.'
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='저장 일시',
+        help_text='캐시가 생성된 시각'
+    )
+
+    expires_at = models.DateTimeField(
+        verbose_name='만료 시각',
+        help_text='이 시간이 지나면 캐시를 무시하고 실제 API를 다시 호출합니다.'
+    )
+
+    class Meta:
+        verbose_name = 'Google API 캐시'
+        verbose_name_plural = 'Google API 캐시 목록'
+        unique_together = [['service_name', 'request_hash']]
+        indexes = [
+            models.Index(fields=['service_name', 'request_hash']),
+            models.Index(fields=['expires_at'])
+        ]
+
+    def __str__(self):
+        return f"{self.service_name} 캐시({self.request_hash})"
+
+    @property
+    def is_expired(self):
+        """
+        캐시 만료 여부 반환
+
+        Returns:
+            bool: True면 만료됨 → 새 API 호출 필요
+        """
+        if not self.expires_at:
+            # 만료 시각이 비어 있으면 즉시 만료로 간주 (안전장치)
+            return True
+        return timezone.now() >= self.expires_at
 # ========== CoordinatorRole 모델 ==========
 class CoordinatorRole(models.Model):
     """

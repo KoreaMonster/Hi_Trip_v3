@@ -165,3 +165,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# Google Maps API 키를 모든 앱에서 공통으로 사용할 수 있도록 설정 파일에서 불러옵니다.
+# .env 파일에 GOOGLE_MAPS_API_KEY 값을 추가한 뒤, config 함수가 값을 찾지 못하면
+# 기본값으로 빈 문자열을 반환해 개발 환경에서도 안전하게 동작하도록 합니다.
+GOOGLE_MAPS_API_KEY = config("GOOGLE_MAPS_API_KEY", default="")

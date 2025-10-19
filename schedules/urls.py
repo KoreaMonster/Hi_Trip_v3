@@ -13,15 +13,21 @@ from .views import (
     OptionalExpenseViewSet,
     PlaceCategoryViewSet,
     PlaceCoordinatorViewSet,
+    PlaceRecommendationViewSet,
     PlaceViewSet,
     ScheduleViewSet,
 )
 
-# 기본 Router: 장소/카테고리/담당자 역할 등 독립 리소스를 등록
+# 기본 Router: 장소/카테고리/담당자 역할 등 독립 리소스를 등록합니다.
 router = DefaultRouter()
 router.register("places", PlaceViewSet, basename="place")
 router.register("categories", PlaceCategoryViewSet, basename="place-category")
 router.register("coordinator-roles", CoordinatorRoleViewSet, basename="coordinator-role")
+router.register(
+    "place-recommendations",
+    PlaceRecommendationViewSet,
+    basename="place-recommendation",
+)
 
 # 장소 하위 리소스(선택 지출, 담당자)를 위한 Nested Router
 place_router = NestedSimpleRouter(router, r"places", lookup="place")
