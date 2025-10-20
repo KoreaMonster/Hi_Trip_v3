@@ -89,6 +89,12 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
 
 
+class LogoutResponseSerializer(serializers.Serializer):
+    """로그아웃 응답 구조를 스키마에 명시하기 위한 Serializer."""
+
+    message = serializers.CharField(read_only=True)
+
+
 class TravelerSerializer(serializers.ModelSerializer):
     """
     여행자 정보 직렬화

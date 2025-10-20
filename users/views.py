@@ -13,6 +13,12 @@ from rest_framework.views import APIView
 
 from .permissions import IsApprovedStaff, IsSuperAdminUser
 from .serializers import LoginSerializer, UserDetailSerializer, UserSerialization
+from .serializers import (
+    LoginSerializer,
+    LogoutResponseSerializer,
+    UserDetailSerializer,
+    UserSerialization,
+)
 
 User = get_user_model()
 
@@ -154,12 +160,12 @@ class LogoutAPIView(APIView):
 
     # 승인된 직원만 로그아웃 API를 호출할 수 있도록 double-check 합니다.
     permission_classes = [IsAuthenticated, IsApprovedStaff]
+    serializer_class = LogoutResponseSerializer
 
     @extend_schema(
         summary="직원 로그아웃",
-        responses={
-            status.HTTP_200_OK: {"type": "object", "properties": {"message": {"type": "string"}}}
-        },
+        request=None,
+        responses={status.HTTP_200_OK: LogoutResponseSerializer},
     )
     def post(self, request, *args, **kwargs):
         # Django의 logout 함수는 세션 데이터를 모두 삭제하고 sessionid 쿠키를 무효화합니다.

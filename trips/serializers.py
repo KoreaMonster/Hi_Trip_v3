@@ -4,6 +4,7 @@ from rest_framework import serializers
 from users.models import User, Traveler
 from users.serializers import TravelerSerializer
 from .models import Trip, TripParticipant
+from typing import Any
 
 class TripSerializer(serializers.ModelSerializer):
     """
@@ -43,7 +44,7 @@ class TripSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
-    def get_manager_name(self, obj):
+    def get_manager_name(self, obj: Trip) -> str | None:
         """
         "담당자(User)가 존재하면 한글 이름을 반환한다.
         담당자 이름 반환
@@ -155,7 +156,7 @@ class TripDetailSerializer(TripSerializer):
         model = Trip
         fields = TripSerializer.Meta.fields + ["participants"]
 
-    def get_participants(self, obj):
+    def get_participants(self, obj: Trip) -> list[dict[str, Any]]:
         """참가자 목록을 직렬화해 반환한다."""
 
         return TripParticipantSerializer(obj.participants.all(), many=True).data

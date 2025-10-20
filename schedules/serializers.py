@@ -1,6 +1,7 @@
 """Schedules 앱에서 사용할 Serializer 정의."""
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
+from typing import Any
 
 from .constants import FIXED_RECOMMENDATION_PLACE_TYPES, SUPPORTED_TRAVEL_MODES
 from .models import (
@@ -89,7 +90,7 @@ class ScheduleSerializer(serializers.ModelSerializer):
             'trip',
         ]
 
-    def get_duration_display(self, obj):
+    def get_duration_display(self, obj: Schedule) -> str:
         """
         소요 시간을 사람이 읽기 쉬운 형식으로 반환
 
@@ -321,7 +322,7 @@ class PlaceSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
 
-    def get_alternative_place_info(self, obj):
+    def get_alternative_place_info(self, obj: Place) -> dict[str, Any] | None:
         """
         AI 대체 장소 JSON 파싱
 

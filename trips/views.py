@@ -1,7 +1,7 @@
 """trips 앱의 REST API ViewSet 모음."""
 
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -93,30 +93,47 @@ class TripParticipantViewSet(
     def get_trip(self) -> Trip:
         """NestedRouter가 전달한 trip_pk로 여행을 조회한다.
 
-        같은 요청에서 여러 번 호출되므로 `_trip_cache`에 저장해 불필요한 DB
-        조회를 줄인다.
+        drf-spectacular가 스키마를 생성할 때는 `swagger_fake_view` 플래그가
+        True로 설정되고 `kwargs`에 `trip_pk`가 존재하지 않는다. 이때는 DB
+        조회를 건너뛰어 경고를 방지한다.
         """
 
+        if getattr(self, "swagger_fake_view", False):
+            return Trip()
+
         if not hasattr(self, "_trip_cache"):
-            self._trip_cache = get_object_or_404(Trip, pk=self.kwargs["trip_pk"])
+            trip_pk = self.kwargs.get("trip_pk")
+            self._trip_cache = get_object_or_404(Trip, pk=trip_pk)
         return self._trip_cache
 
     def get_queryset(self):
         """요청한 여행에 속한 참가자만 반환한다."""
 
-        trip = self.get_trip()
-        return TripParticipant.objects.filter(trip=trip).select_related("traveler")
+        if getattr(self, "swagger_fake_view", False):
+            return TripParticipant.objects.none()
+
+        trip_pk = self.kwargs.get("trip_pk")
+        return TripParticipant.objects.filter(trip_id=trip_pk).select_related("traveler")
 
     def get_serializer_context(self):
         """Serializer가 trip 정보를 활용할 수 있도록 context를 확장한다."""
 
         context = super().get_serializer_context()
-        context["trip"] = self.get_trip()
+        if not getattr(self, "swagger_fake_view", False) and "trip_pk" in self.kwargs:
+            context["trip"] = self.get_trip()
         return context
+
+    TRIP_PK_PARAMETER = OpenApiParameter(
+        name="trip_pk",
+        type=OpenApiTypes.INT,
+        location=OpenApiParameter.PATH,
+        description="상위 여행의 ID (정수).",
+    )
 
     @extend_schema(
         summary="여행 참가자 목록",
         description="특정 여행의 모든 참가자를 반환합니다.",
+        parameters=[TRIP_PK_PARAMETER],
         responses={200: TripParticipantSerializer(many=True)},
     )
     def list(self, request, *args, **kwargs):  # type: ignore[override]
@@ -125,6 +142,7 @@ class TripParticipantViewSet(
     @extend_schema(
         summary="초대코드로 여행 참가",
         description="기존 join_trip API를 대체하는 엔드포인트입니다.",
+        parameters=[TRIP_PK_PARAMETER],
         responses={201: TripParticipantSerializer},
     )
     def create(self, request, *args, **kwargs):  # type: ignore[override]

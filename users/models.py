@@ -10,7 +10,7 @@ class FullNameMixin(models.Model):
         abstract = True # 이 모델을 추상 모델로 설정
 
     @property
-    def full_name_kr(self):
+    def full_name_kr(self) -> str:
         """한글 전체 이름을 반환합니다."""
         # self.last_name_kr, self.first_name_kr 필드가 존재한다고 가정
         if getattr(self, 'last_name_kr', None) and getattr(self, 'first_name_kr', None):
@@ -19,7 +19,7 @@ class FullNameMixin(models.Model):
         return getattr(self, 'username', '')
 
     @property
-    def full_name_en(self):
+    def full_name_en(self) -> str:
         """영문 전체 이름을 반환합니다."""
         # User(first_name, last_name)와 Traveler(first_name_en, last_name_en)의
         # 필드 이름이 다른 경우를 모두 처리합니다.

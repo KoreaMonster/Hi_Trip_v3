@@ -52,10 +52,21 @@ from .services import (
     fetch_place_details,
     geocode_address,
 )
-
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    OpenApiTypes,
+    extend_schema,
+    extend_schema_view,
+)
 
 logger = logging.getLogger(__name__)
 
+PLACE_PK_PARAMETER = OpenApiParameter(
+    name="place_pk",
+    type=OpenApiTypes.INT,
+    location=OpenApiParameter.PATH,
+    description="상위 장소의 ID (정수).",
+)
 # ============================================================================
 # 공통 믹스인: Nested Router에서 전달된 PK를 안전하게 조회
 # ============================================================================
@@ -817,12 +828,12 @@ class PlaceRecommendationViewSet(viewsets.ViewSet):
 # OptionalExpense ViewSet: 장소별 선택 지출
 # ============================================================================
 @extend_schema_view(
-    list=extend_schema(summary="장소별 선택 지출 목록"),
-    create=extend_schema(summary="새 선택 지출 등록"),
-    retrieve=extend_schema(summary="선택 지출 상세"),
-    update=extend_schema(summary="선택 지출 전체 수정"),
-    partial_update=extend_schema(summary="선택 지출 부분 수정"),
-    destroy=extend_schema(summary="선택 지출 삭제"),
+    list=extend_schema(summary="장소별 선택 지출 목록", parameters=[PLACE_PK_PARAMETER]),
+    create=extend_schema(summary="새 선택 지출 등록", parameters=[PLACE_PK_PARAMETER]),
+    retrieve=extend_schema(summary="선택 지출 상세", parameters=[PLACE_PK_PARAMETER]),
+    update=extend_schema(summary="선택 지출 전체 수정", parameters=[PLACE_PK_PARAMETER]),
+    partial_update=extend_schema(summary="선택 지출 부분 수정", parameters=[PLACE_PK_PARAMETER]),
+    destroy=extend_schema(summary="선택 지출 삭제", parameters=[PLACE_PK_PARAMETER]),
 )
 class OptionalExpenseViewSet(PlaceLookupMixin, viewsets.ModelViewSet):
     """OptionalExpense CRUD + 비용 합산 액션을 제공."""
@@ -831,7 +842,11 @@ class OptionalExpenseViewSet(PlaceLookupMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsApprovedStaff]
 
     def get_queryset(self):
-        return OptionalExpense.objects.filter(place=self.get_place()).order_by("display_order", "id")
+        if getattr(self, "swagger_fake_view", False):
+            return OptionalExpense.objects.none()
+
+        place = self.get_place()
+        return OptionalExpense.objects.filter(place=place).order_by("display_order", "id")
 
     def perform_create(self, serializer):
         serializer.save(place=self.get_place())
@@ -839,7 +854,11 @@ class OptionalExpenseViewSet(PlaceLookupMixin, viewsets.ModelViewSet):
     def perform_update(self, serializer):
         serializer.save(place=self.get_place())
 
-    @extend_schema(summary="선택 지출 합계 계산", request=ExpenseSelectionSerializer)
+    @extend_schema(
+        summary="선택 지출 합계 계산",
+        request=ExpenseSelectionSerializer,
+        parameters=[PLACE_PK_PARAMETER],
+    )
     @action(detail=False, methods=["post"], url_path="calculate")
     def calculate(self, request, *args, **kwargs):
         """선택한 OptionalExpense ID 목록을 받아 총액을 계산합니다."""
@@ -853,12 +872,12 @@ class OptionalExpenseViewSet(PlaceLookupMixin, viewsets.ModelViewSet):
 # PlaceCoordinator ViewSet: 장소 담당자 관리
 # ============================================================================
 @extend_schema_view(
-    list=extend_schema(summary="장소별 담당자 목록"),
-    create=extend_schema(summary="담당자 추가"),
-    retrieve=extend_schema(summary="담당자 상세"),
-    update=extend_schema(summary="담당자 정보 수정"),
-    partial_update=extend_schema(summary="담당자 정보 부분 수정"),
-    destroy=extend_schema(summary="담당자 삭제"),
+    list=extend_schema(summary="장소별 담당자 목록", parameters=[PLACE_PK_PARAMETER]),
+    create=extend_schema(summary="담당자 추가", parameters=[PLACE_PK_PARAMETER]),
+    retrieve=extend_schema(summary="담당자 상세", parameters=[PLACE_PK_PARAMETER]),
+    update=extend_schema(summary="담당자 정보 수정", parameters=[PLACE_PK_PARAMETER]),
+    partial_update=extend_schema(summary="담당자 정보 부분 수정", parameters=[PLACE_PK_PARAMETER]),
+    destroy=extend_schema(summary="담당자 삭제", parameters=[PLACE_PK_PARAMETER]),
 )
 class PlaceCoordinatorViewSet(PlaceLookupMixin, viewsets.ModelViewSet):
     """Place에 연결된 담당자 정보를 CRUD로 관리합니다."""
@@ -867,9 +886,13 @@ class PlaceCoordinatorViewSet(PlaceLookupMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsApprovedStaff]
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return PlaceCoordinator.objects.none()
+
+        place = self.get_place()
         return (
             PlaceCoordinator.objects.select_related("place", "role")
-            .filter(place=self.get_place())
+            .filter(place=place)
             .order_by("id")
         )
 

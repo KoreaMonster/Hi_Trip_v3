@@ -4,6 +4,13 @@ from rest_framework import serializers
 
 from .models import HealthSnapshot, LocationSnapshot, MonitoringAlert
 
+class HealthCheckSerializer(serializers.Serializer):
+    """헬스 체크 응답의 간단한 JSON 구조."""
+
+    status = serializers.CharField(read_only=True)
+    message = serializers.CharField(read_only=True)
+    service = serializers.CharField(read_only=True)
+
 
 class HealthSnapshotSerializer(serializers.ModelSerializer):
     """HealthSnapshot을 읽기 전용으로 노출한다."""
