@@ -78,7 +78,7 @@ DATABASES = {
     }
 }
 
-# CORS 설정 (서연과의 협업용)
+# CORS 설정
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  # React 기본 포트
     'http://127.0.0.1:3000',  # (혹시 모르니 이것도 추가)
