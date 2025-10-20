@@ -8,14 +8,14 @@ import type React from "react"
  */
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { Link, useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/Button"
 import { Input } from "@/components/ui/Input"
 import { useAuthStore } from "@/lib/store/authStore"
 import { STORAGE_KEYS } from "@/lib/utils/constants"
 
 export default function LoginPage() {
-  const router = useRouter()
+  const navigate = useNavigate()
   const { login, isAuthenticated, isLoading, error, clearError } = useAuthStore()
 
   // 폼 상태
@@ -39,9 +39,9 @@ export default function LoginPage() {
    */
   useEffect(() => {
     if (isAuthenticated) {
-      router.push("/dashboard")
+      navigate("/dashboard", { replace: true })
     }
-  }, [isAuthenticated, router])
+  }, [isAuthenticated, navigate])
 
   /**
    * 로그인 처리
@@ -158,9 +158,9 @@ export default function LoginPage() {
               비밀번호 찾기
             </a>
             <span className="mx-2">|</span>
-            <a href="/register" className="hover:text-primary">
+            <Link to="/register" className="hover:text-primary">
               회원가입
-            </a>
+            </Link>
           </div>
 
           {/* 저작권 */}

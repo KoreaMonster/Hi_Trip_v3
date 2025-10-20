@@ -9,8 +9,7 @@ import type React from "react"
  */
 
 import { useState } from "react"
-import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 import { useAuthStore } from "@/lib/store/authStore"
 import { LayoutDashboard, Plane, Users, Calendar, MapPin, FileText, Search, LogOut } from "lucide-react"
 
@@ -22,8 +21,8 @@ interface LayoutProps {
  * 메인 레이아웃
  */
 export default function Layout({ children }: LayoutProps) {
-  const pathname = usePathname()
-  const router = useRouter()
+  const location = useLocation()
+  const navigate = useNavigate()
   const { user, logout } = useAuthStore()
   const [searchQuery, setSearchQuery] = useState("")
 
@@ -33,7 +32,7 @@ export default function Layout({ children }: LayoutProps) {
   const handleLogout = async () => {
     try {
       await logout()
-      router.push("/login")
+      navigate("/login")
     } catch (error) {
       console.error("로그아웃 실패:", error)
     }
@@ -54,7 +53,7 @@ export default function Layout({ children }: LayoutProps) {
       <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
         {/* 로고 */}
         <div className="h-16 flex items-center px-6 border-b border-gray-200">
-          <Link href="/dashboard" className="flex items-center gap-2">
+          <Link to="/dashboard" className="flex items-center gap-2">
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
               <Plane className="w-5 h-5 text-white" />
             </div>
@@ -67,9 +66,9 @@ export default function Layout({ children }: LayoutProps) {
           <div className="px-3 space-y-1">
             {/* Dashboard */}
             <Link
-              href="/dashboard"
+              to="/dashboard"
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                pathname === "/dashboard"
+                location.pathname === "/dashboard"
                   ? "bg-primary-light text-primary font-medium"
                   : "text-text-secondary hover:bg-gray-50"
               }`}
@@ -82,9 +81,9 @@ export default function Layout({ children }: LayoutProps) {
             <div className="pt-4">
               <p className="px-3 text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">여행 전 관리</p>
               <Link
-                href="/trips/planning"
+                to="/trips/planning"
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                  pathname.startsWith("/trips/planning")
+                  location.pathname.startsWith("/trips/planning")
                     ? "bg-primary-light text-primary font-medium"
                     : "text-text-secondary hover:bg-gray-50"
                 }`}
@@ -93,9 +92,9 @@ export default function Layout({ children }: LayoutProps) {
                 <span>고객 관리</span>
               </Link>
               <Link
-                href="/schedules"
+                to="/schedules"
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                  pathname.startsWith("/schedules")
+                  location.pathname.startsWith("/schedules")
                     ? "bg-primary-light text-primary font-medium"
                     : "text-text-secondary hover:bg-gray-50"
                 }`}
@@ -109,9 +108,9 @@ export default function Layout({ children }: LayoutProps) {
             <div className="pt-4">
               <p className="px-3 text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">여행 중 관리</p>
               <Link
-                href="/trips/ongoing"
+                to="/trips/ongoing"
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                  pathname.startsWith("/trips/ongoing")
+                  location.pathname.startsWith("/trips/ongoing")
                     ? "bg-primary-light text-primary font-medium"
                     : "text-text-secondary hover:bg-gray-50"
                 }`}
@@ -120,9 +119,9 @@ export default function Layout({ children }: LayoutProps) {
                 <span>고객 관리</span>
               </Link>
               <Link
-                href="/recommendations"
+                to="/recommendations"
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                  pathname.startsWith("/recommendations")
+                  location.pathname.startsWith("/recommendations")
                     ? "bg-primary-light text-primary font-medium"
                     : "text-text-secondary hover:bg-gray-50"
                 }`}
@@ -136,9 +135,9 @@ export default function Layout({ children }: LayoutProps) {
             <div className="pt-4">
               <p className="px-3 text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">여행 후 관리</p>
               <Link
-                href="/trips/completed"
+                to="/trips/completed"
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                  pathname.startsWith("/trips/completed")
+                  location.pathname.startsWith("/trips/completed")
                     ? "bg-primary-light text-primary font-medium"
                     : "text-text-secondary hover:bg-gray-50"
                 }`}

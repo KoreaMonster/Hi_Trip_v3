@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useNavigate, useParams } from "react-router-dom"
 import Layout from "@/components/Layout"
 import { Card } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
@@ -42,14 +42,14 @@ const DUMMY_PLACE = {
 
 export default function RecommendationDetailPage() {
   const params = useParams()
-  const router = useRouter()
-  const placeId = params.id as string
+  const navigate = useNavigate()
+  const placeId = params.id
 
   const [place, setPlace] = useState(DUMMY_PLACE)
 
   // 목록으로 돌아가기
   const handleBack = () => {
-    router.push("/recommendations")
+    navigate("/recommendations")
   }
 
   // 인쇄

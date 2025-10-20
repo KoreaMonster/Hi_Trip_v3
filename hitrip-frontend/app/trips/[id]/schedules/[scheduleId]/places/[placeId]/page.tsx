@@ -1,11 +1,12 @@
 "use client"
 
 import { useState } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useNavigate, useParams } from "react-router-dom"
 import { ArrowLeft, Printer, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
 import { Input } from "@/components/ui/Input"
+import Layout from "@/components/Layout"
 
 /**
  * 장소 상세 페이지
@@ -53,7 +54,7 @@ const DUMMY_PLACE = {
 
 export default function PlaceDetailPage() {
   const params = useParams()
-  const router = useRouter()
+  const navigate = useNavigate()
   const tripId = params.id as string
   const scheduleId = params.scheduleId as string
   const placeId = params.placeId as string
@@ -63,7 +64,7 @@ export default function PlaceDetailPage() {
 
   // 목록으로 돌아가기
   const handleBack = () => {
-    router.push(`/trips/${tripId}/schedules`)
+    navigate(`/trips/${tripId}/schedules`)
   }
 
   // 수정 모드 토글
@@ -83,27 +84,28 @@ export default function PlaceDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* 헤더 */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="secondary" onClick={handleBack}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            목록
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-text-primary">장소 정보</h1>
-            <p className="text-sm text-text-secondary mt-1">방문 장소의 상세 정보를 확인할 수 있습니다</p>
+    <Layout>
+      <div className="p-8 space-y-6">
+        {/* 헤더 */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="secondary" onClick={handleBack}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              목록
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold text-text-primary">장소 정보</h1>
+              <p className="text-sm text-text-secondary mt-1">방문 장소의 상세 정보를 확인할 수 있습니다</p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={handlePrint}>
+              <Printer className="w-4 h-4 mr-2" />
+              인쇄
+            </Button>
+            <Button onClick={handleEdit}>{isEditing ? "저장" : "수정"}</Button>
           </div>
         </div>
-        <div className="flex gap-3">
-          <Button variant="secondary" onClick={handlePrint}>
-            <Printer className="w-4 h-4 mr-2" />
-            인쇄
-          </Button>
-          <Button onClick={handleEdit}>{isEditing ? "저장" : "수정"}</Button>
-        </div>
-      </div>
 
       {/* 장소 정보 */}
       <Card>
@@ -227,6 +229,7 @@ export default function PlaceDetailPage() {
           </table>
         </div>
       </Card>
-    </div>
+      </div>
+    </Layout>
   )
 }

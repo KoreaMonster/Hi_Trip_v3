@@ -1,13 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useNavigate, useParams } from "react-router-dom"
 import { Plus, GripVertical } from "lucide-react"
 import { Button } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs"
 import { Modal } from "@/components/ui/Modal"
 import { Input } from "@/components/ui/Input"
+import Layout from "@/components/Layout"
 
 /**
  * 일정 관리 페이지
@@ -82,7 +83,7 @@ const DUMMY_SCHEDULES = [
 
 export default function SchedulesPage() {
   const params = useParams()
-  const router = useRouter()
+  const navigate = useNavigate()
   const tripId = params.id as string
 
   // 상태 관리
@@ -96,7 +97,7 @@ export default function SchedulesPage() {
     .sort((a, b) => a.order - b.order)
 
   // 전체 일차 수 계산 (최대 일차)
-  const totalDays = Math.max(...schedules.map((s) => s.day))
+  const totalDays = schedules.length > 0 ? Math.max(...schedules.map((s) => s.day)) : 1
 
   // 일정 추가 핸들러
   const handleAddSchedule = () => {
@@ -106,22 +107,23 @@ export default function SchedulesPage() {
   // 장소 상세 페이지로 이동
   const handlePlaceClick = (scheduleId: number) => {
     // 실제로는 schedule의 place_id를 사용해야 함
-    router.push(`/trips/${tripId}/schedules/${scheduleId}/places/1`)
+    navigate(`/trips/${tripId}/schedules/${scheduleId}/places/1`)
   }
 
   return (
-    <div className="space-y-6">
-      {/* 헤더 */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-text-primary">일정 관리</h1>
-          <p className="text-sm text-text-secondary mt-1">여행 일정을 일차별로 관리할 수 있습니다</p>
+    <Layout>
+      <div className="p-8 space-y-6">
+        {/* 헤더 */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-text-primary">일정 관리</h1>
+            <p className="text-sm text-text-secondary mt-1">여행 일정을 일차별로 관리할 수 있습니다</p>
+          </div>
+          <Button onClick={handleAddSchedule}>
+            <Plus className="w-4 h-4 mr-2" />
+            일정 추가하기
+          </Button>
         </div>
-        <Button onClick={handleAddSchedule}>
-          <Plus className="w-4 h-4 mr-2" />
-          일정 추가하기
-        </Button>
-      </div>
 
       {/* 일차별 탭 */}
       <Card>
@@ -249,6 +251,7 @@ export default function SchedulesPage() {
           </div>
         </form>
       </Modal>
-    </div>
+      </div>
+    </Layout>
   )
 }

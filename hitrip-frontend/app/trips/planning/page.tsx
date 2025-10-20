@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useNavigate } from "react-router-dom"
 import Layout from "@/components/Layout"
 import { Card } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
@@ -17,7 +17,7 @@ import type { Trip } from "@/lib/types"
 import { Plus } from "lucide-react"
 
 export default function TripsPage() {
-  const router = useRouter()
+  const navigate = useNavigate()
   const { user } = useAuthStore()
   const [trips, setTrips] = useState<Trip[]>([])
   const [loading, setLoading] = useState(true)
@@ -47,7 +47,7 @@ export default function TripsPage() {
    * 여행 클릭 시 참가자 관리 페이지로 이동
    */
   const handleTripClick = (tripId: number) => {
-    router.push(`/trips/${tripId}/participants`)
+    navigate(`/trips/${tripId}/participants`)
   }
 
   /**
