@@ -6,7 +6,7 @@
  */
 
 import { useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useNavigate } from "react-router-dom"
 import { useAuthStore } from "@/lib/store/authStore"
 import Layout from "@/components/Layout"
 import StatCard from "@/components/ui/StatCard"
@@ -39,7 +39,7 @@ const recentActivities = [
 ]
 
 export default function DashboardPage() {
-  const router = useRouter()
+  const navigate = useNavigate()
   const { isAuthenticated, isLoading, checkAuth } = useAuthStore()
 
   /**
@@ -54,9 +54,9 @@ export default function DashboardPage() {
    */
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      router.push("/login")
+      navigate("/login")
     }
-  }, [isAuthenticated, isLoading, router])
+  }, [isAuthenticated, isLoading, navigate])
 
   // 로딩 중
   if (isLoading) {

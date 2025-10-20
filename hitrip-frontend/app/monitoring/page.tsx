@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams } from "react-router-dom"
 import Layout from "@/components/Layout"
 import { Card } from "@/components/ui/Card"
 import { Input } from "@/components/ui/Input"
@@ -106,7 +106,7 @@ const DUMMY_PARTICIPANTS = [
 ]
 
 export default function MonitoringPage() {
-  const searchParams = useSearchParams()
+  const [searchParams] = useSearchParams()
   const tripId = searchParams.get("tripId")
 
   const [participants, setParticipants] = useState(DUMMY_PARTICIPANTS)

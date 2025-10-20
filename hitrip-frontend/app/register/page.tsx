@@ -8,13 +8,13 @@ import type React from "react"
  */
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/Button"
 import { Input } from "@/components/ui/Input"
 import { authApi, handleApiError } from "@/lib/api/client"
 
 export default function RegisterPage() {
-  const router = useRouter()
+  const navigate = useNavigate()
 
   // 폼 상태
   const [formData, setFormData] = useState({
@@ -82,7 +82,7 @@ export default function RegisterPage() {
       })
 
       alert("회원가입이 완료되었습니다. 승인 후 로그인할 수 있습니다.")
-      router.push("/login")
+      navigate("/login")
     } catch (error) {
       const errorMessage = handleApiError(error)
       setError(errorMessage)
@@ -166,7 +166,7 @@ export default function RegisterPage() {
 
           {/* 버튼 */}
           <div className="flex gap-3">
-            <Button type="button" variant="secondary" className="flex-1" onClick={() => router.push("/login")}>
+            <Button type="button" variant="secondary" className="flex-1" onClick={() => navigate("/login")}>
               취소
             </Button>
             <Button type="submit" className="flex-1" disabled={isLoading}>
