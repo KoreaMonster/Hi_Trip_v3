@@ -94,11 +94,18 @@ class TripMonitoringViewSet(viewsets.ViewSet):
                 else None
             )
 
-            payload.append({
-                'participant': status_obj.participant,
-                'health': health_data,
-                'location': location_data,
-            })
+            participant = status_obj.participant
+            traveler = participant.traveler
+
+            payload.append(
+                {
+                    "participant_id": participant.id,
+                    "traveler_name": traveler.full_name_kr,
+                    "trip_id": participant.trip_id,
+                    "health": health_data,
+                    "location": location_data,
+                }
+            )
 
         serializer = ParticipantLatestSerializer(payload, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -112,6 +119,10 @@ class TripMonitoringViewSet(viewsets.ViewSet):
     @action(detail=True, methods=["get"], url_path="alerts")
     def alerts(self, request, pk=None):
         trip = self.get_trip(pk)
-        alerts = MonitoringAlert.objects.filter(trip=trip).order_by('-created_at')
+        alerts = (
+            MonitoringAlert.objects.filter(participant__trip=trip)
+            .select_related("participant", "participant__traveler")
+            .order_by("-created_at")
+        )
         serializer = MonitoringAlertSerializer(alerts, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
