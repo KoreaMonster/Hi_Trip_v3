@@ -26,6 +26,7 @@ from .models import (
     Place,
     PlaceCategory,
     PlaceCoordinator,
+    PlaceSummaryCard,
     Schedule,
 )
 from .permissions import IsTripCoordinator
@@ -38,13 +39,18 @@ from .serializers import (
     PlaceCategorySerializer,
     PlaceCoordinatorSerializer,
     PlaceSerializer,
+    PlaceSummaryCardSerializer,
     ScheduleSerializer,
     ScheduleRebalanceRequestSerializer,
+    SummaryGenerationRequestSerializer,
 )
 from .constants import FIXED_RECOMMENDATION_PLACE_TYPES
 from .services import (
     GoogleMapsError,
     GooglePlace,
+    PerplexityError,
+    SummaryCardService,
+    SummaryValidationError,
     build_location_payload,
     build_place_id_payload,
     compute_route_duration,
@@ -408,6 +414,77 @@ class PlaceViewSet(viewsets.ModelViewSet):
     queryset = Place.objects.select_related("category").all()
     serializer_class = PlaceSerializer
     permission_classes = [IsAuthenticated, IsApprovedStaff]
+
+
+@extend_schema_view(
+    list=extend_schema(summary="장소 요약 카드 조회", responses={200: PlaceSummaryCardSerializer}),
+)
+class PlaceSummaryCardViewSet(PlaceLookupMixin, viewsets.ViewSet):
+    """PlaceSummaryCard 단일 리소스를 위한 보조 ViewSet."""
+
+    permission_classes = [IsAuthenticated, IsApprovedStaff]
+    summary_service = SummaryCardService()
+
+    def get_serializer_context(self):
+        return {"request": self.request}
+
+    def _load_card(self, place: Place) -> PlaceSummaryCard:
+        """SummaryCard + 최신 소식까지 한 번에 Prefetch."""
+
+        queryset = (
+            PlaceSummaryCard.objects.with_recent_updates()
+            .select_related("place", "created_by")
+            .filter(place=place)
+        )
+        card = queryset.first()
+        if card is None:
+            card = self.summary_service.get_or_create_card(place)
+            card = (
+                PlaceSummaryCard.objects.with_recent_updates()
+                .select_related("place", "created_by")
+                .get(pk=card.pk)
+            )
+        return card
+
+    def list(self, request, *args, **kwargs):
+        place = self.get_place()
+        card = self._load_card(place)
+        serializer = PlaceSummaryCardSerializer(
+            card, context=self.get_serializer_context()
+        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        summary="Perplexity를 이용해 요약 카드 재생성",
+        request=SummaryGenerationRequestSerializer,
+        responses={200: PlaceSummaryCardSerializer, 422: None, 502: None},
+    )
+    @action(detail=False, methods=["post"], url_path="refresh")
+    def refresh(self, request, *args, **kwargs):
+        place = self.get_place()
+        serializer = SummaryGenerationRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        params = serializer.validated_data
+        force_refresh = params.get("force_refresh", False)
+        memo = params.get("memo")
+        if memo:
+            logger.info(
+                "요약 카드 재생성 요청 메모", extra={"place_id": place.pk, "memo": memo}
+            )
+
+        try:
+            card = self.summary_service.generate(
+                place=place, requested_by=request.user, force_refresh=force_refresh
+            )
+        except PerplexityError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        except SummaryValidationError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+        card = self._load_card(place)
+        data = PlaceSummaryCardSerializer(card, context=self.get_serializer_context()).data
+        return Response(data, status=status.HTTP_200_OK)
+
 
 # ============================================================================
 # PlaceRecommendation ViewSet: Google Places 기반 추천 API
