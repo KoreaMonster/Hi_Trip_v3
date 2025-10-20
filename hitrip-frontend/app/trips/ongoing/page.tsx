@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useNavigate } from "react-router-dom"
 import Layout from "@/components/Layout"
 import { Card } from "@/components/ui/Card"
 
@@ -48,12 +48,12 @@ const DUMMY_ONGOING_TRIPS = [
 ]
 
 export default function OngoingTripsPage() {
-  const router = useRouter()
+  const navigate = useNavigate()
   const [trips, setTrips] = useState(DUMMY_ONGOING_TRIPS)
 
   // 여행 클릭 시 모니터링 페이지로 이동
   const handleTripClick = (tripId: number) => {
-    router.push(`/monitoring?tripId=${tripId}`)
+    navigate(`/monitoring?tripId=${tripId}`)
   }
 
   return (

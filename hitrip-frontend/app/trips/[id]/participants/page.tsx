@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useNavigate, useParams } from "react-router-dom"
 import Layout from "@/components/Layout"
 import { Card } from "@/components/ui/Card"
 import { Input } from "@/components/ui/Input"
@@ -17,7 +17,7 @@ import { Search, Check, X } from "lucide-react"
 
 export default function ParticipantsPage() {
   const params = useParams()
-  const router = useRouter()
+  const navigate = useNavigate()
   const tripId = Number(params.id)
 
   const [participants, setParticipants] = useState<TripParticipant[]>([])
@@ -64,7 +64,7 @@ export default function ParticipantsPage() {
    * 참가자 클릭 시 상세 페이지로 이동
    */
   const handleParticipantClick = (participantId: number) => {
-    router.push(`/trips/${tripId}/participants/${participantId}`)
+    navigate(`/trips/${tripId}/participants/${participantId}`)
   }
 
   /**

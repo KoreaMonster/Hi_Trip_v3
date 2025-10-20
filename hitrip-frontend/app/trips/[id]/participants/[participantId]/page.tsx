@@ -8,7 +8,7 @@ import type React from "react"
  */
 
 import { useState, useEffect } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useNavigate, useParams } from "react-router-dom"
 import Layout from "@/components/Layout"
 import { Card } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
@@ -18,7 +18,7 @@ import type { TripParticipant } from "@/lib/types"
 
 export default function ParticipantDetailPage() {
   const params = useParams()
-  const router = useRouter()
+  const navigate = useNavigate()
   const tripId = Number(params.id)
   const participantId = Number(params.participantId)
 
@@ -123,7 +123,7 @@ export default function ParticipantDetailPage() {
       setSaving(true)
       await tripsApi.updateParticipant(tripId, participantId, formData)
       alert("정상적으로 저장 하였습니다.")
-      router.push(`/trips/${tripId}/participants`)
+      navigate(`/trips/${tripId}/participants`)
     } catch (error) {
       console.error("저장 실패:", error)
       alert("저장에 실패했습니다.")
@@ -136,7 +136,7 @@ export default function ParticipantDetailPage() {
    * 목록으로 돌아가기
    */
   const handleBack = () => {
-    router.push(`/trips/${tripId}/participants`)
+    navigate(`/trips/${tripId}/participants`)
   }
 
   if (loading) {

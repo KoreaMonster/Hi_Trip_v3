@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useNavigate } from "react-router-dom"
 import Layout from "@/components/Layout"
 import { Card } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
@@ -77,7 +77,7 @@ const DUMMY_RECOMMENDATIONS = [
 const REGIONS = ["전체보기", "서울 동작구", "서울 서대문구", "경기도 이천"]
 
 export default function RecommendationsPage() {
-  const router = useRouter()
+  const navigate = useNavigate()
   const [selectedRegion, setSelectedRegion] = useState("전체보기")
   const [recommendations, setRecommendations] = useState(DUMMY_RECOMMENDATIONS)
 
@@ -92,7 +92,7 @@ export default function RecommendationsPage() {
 
   // 장소 상세 페이지로 이동
   const handlePlaceClick = (placeId: number) => {
-    router.push(`/recommendations/${placeId}`)
+    navigate(`/recommendations/${placeId}`)
   }
 
   return (
