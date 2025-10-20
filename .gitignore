@@ -33,4 +33,4 @@ Thumbs.db
 # 프로젝트
 ngrok.exe
 models_*.png
-frontend/
+#frontend/
