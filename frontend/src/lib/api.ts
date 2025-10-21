@@ -9,18 +9,36 @@ import type {
   ParticipantLatest,
   Place,
   PlaceCoordinator,
+  PlaceCoordinatorCreate,
+  PlaceCoordinatorUpdate,
   PlaceCategory,
+  PlaceCreate,
+  PlaceSummaryCard,
+  PlaceSummaryRefreshRequest,
+  PlaceUpdate,
   ProfileResponse,
   Schedule,
   ScheduleCreate,
+  ScheduleUpdate,
   ScheduleRebalanceRequest,
   ScheduleRebalanceResponse,
+  StaffRegisterRequest,
+  StaffUpdateRequest,
   Trip,
   TripCreate,
   TripDetail,
+  TripParticipantCreate,
   TripParticipant,
+  TripUpdate,
+  Traveler,
   TravelerDetail,
   UserDetail,
+  OptionalExpense,
+  OptionalExpenseCreate,
+  OptionalExpenseSelection,
+  OptionalExpenseTotal,
+  OptionalExpenseUpdate,
+  CoordinatorRole,
 } from '@/types/api';
 
 const toTripStatus = (value: Trip['status'] | string | undefined): Trip['status'] => {
@@ -144,23 +162,145 @@ export const createTrip = async (body: TripCreate): Promise<Trip> =>
     return normalizeTrip(trip);
   });
 
+export const updateTrip = async (tripId: number, body: TripUpdate): Promise<Trip> =>
+  apiRequest(async () => {
+    const trip = await apiClient.patch(`api/trips/${tripId}/`, { json: body }).json<Trip>();
+    return normalizeTrip(trip);
+  });
+
+export const deleteTrip = async (tripId: number): Promise<void> =>
+  apiRequest(async () => {
+    await apiClient.delete(`api/trips/${tripId}/`);
+  });
+
 export const listParticipants = async (tripId: number): Promise<TripParticipant[]> =>
   apiRequest(() => apiClient.get(`api/trips/${tripId}/participants/`).json<TripParticipant[]>());
+
+export const createTripParticipant = async (
+  tripId: number,
+  body: TripParticipantCreate,
+): Promise<TripParticipant> =>
+  apiRequest(() =>
+    apiClient
+      .post(`api/trips/${tripId}/participants/`, { json: body })
+      .json<{ participant: TripParticipant }>()
+      .then((response) => response.participant),
+  );
 
 export const listPlaces = async (): Promise<Place[]> =>
   apiRequest(() => apiClient.get('api/places/').json<Place[]>());
 
+export const createPlace = async (body: PlaceCreate): Promise<Place> =>
+  apiRequest(() => apiClient.post('api/places/', { json: body }).json<Place>());
+
+export const updatePlace = async (placeId: number | string, body: PlaceUpdate): Promise<Place> =>
+  apiRequest(() => apiClient.patch(`api/places/${placeId}/`, { json: body }).json<Place>());
+
+export const deletePlace = async (placeId: number | string): Promise<void> =>
+  apiRequest(async () => {
+    await apiClient.delete(`api/places/${placeId}/`);
+  });
+
 export const getPlaceDetail = async (placeId: number | string): Promise<Place> =>
   apiRequest(() => apiClient.get(`api/places/${placeId}/`).json<Place>());
 
+export const getPlaceSummaryCard = async (placeId: number | string): Promise<PlaceSummaryCard> =>
+  apiRequest(() => apiClient.get(`api/places/${placeId}/summary-card/`).json<PlaceSummaryCard>());
+
+export const refreshPlaceSummaryCard = async (
+  placeId: number | string,
+  body?: PlaceSummaryRefreshRequest,
+): Promise<PlaceSummaryCard> =>
+  apiRequest(() =>
+    apiClient
+      .post(`api/places/${placeId}/summary-card/refresh/`, { json: body ?? {} })
+      .json<PlaceSummaryCard>(),
+  );
+
 export const listCategories = async (): Promise<PlaceCategory[]> =>
   apiRequest(() => apiClient.get('api/categories/').json<PlaceCategory[]>());
+
+export const listCoordinatorRoles = async (): Promise<CoordinatorRole[]> =>
+  apiRequest(() => apiClient.get('api/coordinator-roles/').json<CoordinatorRole[]>());
 
 export const listPlaceCoordinators = async (
   placeId: number | string,
 ): Promise<PlaceCoordinator[]> =>
   apiRequest(() =>
     apiClient.get(`api/places/${placeId}/coordinators/`).json<PlaceCoordinator[]>(),
+  );
+
+export const createPlaceCoordinator = async (
+  placeId: number | string,
+  body: PlaceCoordinatorCreate,
+): Promise<PlaceCoordinator> =>
+  apiRequest(() =>
+    apiClient
+      .post(`api/places/${placeId}/coordinators/`, { json: body })
+      .json<PlaceCoordinator>(),
+  );
+
+export const updatePlaceCoordinator = async (
+  placeId: number | string,
+  coordinatorId: number,
+  body: PlaceCoordinatorUpdate,
+): Promise<PlaceCoordinator> =>
+  apiRequest(() =>
+    apiClient
+      .patch(`api/places/${placeId}/coordinators/${coordinatorId}/`, { json: body })
+      .json<PlaceCoordinator>(),
+  );
+
+export const deletePlaceCoordinator = async (
+  placeId: number | string,
+  coordinatorId: number,
+): Promise<void> =>
+  apiRequest(async () => {
+    await apiClient.delete(`api/places/${placeId}/coordinators/${coordinatorId}/`);
+  });
+
+export const listOptionalExpenses = async (
+  placeId: number | string,
+): Promise<OptionalExpense[]> =>
+  apiRequest(() => apiClient.get(`api/places/${placeId}/expenses/`).json<OptionalExpense[]>());
+
+export const createOptionalExpense = async (
+  placeId: number | string,
+  body: OptionalExpenseCreate,
+): Promise<OptionalExpense> =>
+  apiRequest(() =>
+    apiClient
+      .post(`api/places/${placeId}/expenses/`, { json: body })
+      .json<OptionalExpense>(),
+  );
+
+export const updateOptionalExpense = async (
+  placeId: number | string,
+  expenseId: number,
+  body: OptionalExpenseUpdate,
+): Promise<OptionalExpense> =>
+  apiRequest(() =>
+    apiClient
+      .patch(`api/places/${placeId}/expenses/${expenseId}/`, { json: body })
+      .json<OptionalExpense>(),
+  );
+
+export const deleteOptionalExpense = async (
+  placeId: number | string,
+  expenseId: number,
+): Promise<void> =>
+  apiRequest(async () => {
+    await apiClient.delete(`api/places/${placeId}/expenses/${expenseId}/`);
+  });
+
+export const calculateOptionalExpenseTotal = async (
+  placeId: number | string,
+  body: OptionalExpenseSelection,
+): Promise<OptionalExpenseTotal> =>
+  apiRequest(() =>
+    apiClient
+      .post(`api/places/${placeId}/expenses/calculate/`, { json: body })
+      .json<OptionalExpenseTotal>(),
   );
 
 export const listPendingStaff = async (): Promise<UserDetail[]> =>
@@ -191,8 +331,22 @@ export const listStaff = async (params?: { is_approved?: boolean }): Promise<Use
       .json<UserDetail[]>();
   });
 
+export const registerStaff = async (body: StaffRegisterRequest): Promise<UserDetail> =>
+  apiRequest(() => apiClient.post('api/auth/staff/', { json: body }).json<UserDetail>());
+
+export const updateStaff = async (staffId: number, body: StaffUpdateRequest): Promise<UserDetail> =>
+  apiRequest(() => apiClient.patch(`api/auth/staff/${staffId}/`, { json: body }).json<UserDetail>());
+
+export const deleteStaff = async (staffId: number): Promise<void> =>
+  apiRequest(async () => {
+    await apiClient.delete(`api/auth/staff/${staffId}/`);
+  });
+
 export const approveStaff = async (staffId: number): Promise<UserDetail> =>
   apiRequest(() => apiClient.post(`api/auth/staff/${staffId}/approve/`).json<UserDetail>());
+
+export const listTravelers = async (): Promise<Traveler[]> =>
+  apiRequest(() => apiClient.get('api/travelers/').json<Traveler[]>());
 
 export const listSchedules = async (tripId: number): Promise<Schedule[]> =>
   apiRequest(() => apiClient.get(`api/trips/${tripId}/schedules/`).json<Schedule[]>());
@@ -202,6 +356,20 @@ export const createSchedule = async (
   body: ScheduleCreate,
 ): Promise<Schedule> =>
   apiRequest(() => apiClient.post(`api/trips/${tripId}/schedules/`, { json: body }).json<Schedule>());
+
+export const updateSchedule = async (
+  tripId: number,
+  scheduleId: number,
+  body: ScheduleUpdate,
+): Promise<Schedule> =>
+  apiRequest(() =>
+    apiClient.patch(`api/trips/${tripId}/schedules/${scheduleId}/`, { json: body }).json<Schedule>(),
+  );
+
+export const deleteSchedule = async (tripId: number, scheduleId: number): Promise<void> =>
+  apiRequest(async () => {
+    await apiClient.delete(`api/trips/${tripId}/schedules/${scheduleId}/`);
+  });
 
 export const rebalanceTripDay = async (
   tripId: number,

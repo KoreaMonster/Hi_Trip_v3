@@ -9,7 +9,9 @@ import {
   getProfile,
   getTripDetail,
   getTravelerDetail,
+  getPlaceSummaryCard,
   listCategories,
+  listCoordinatorRoles,
   listParticipants,
   listPlaceCoordinators,
   getPlaceDetail,
@@ -18,6 +20,8 @@ import {
   listSchedules,
   listStaff,
   listTrips,
+  listOptionalExpenses,
+  listTravelers,
 } from '@/lib/api';
 import type {
   HealthResponse,
@@ -27,12 +31,16 @@ import type {
   Place,
   PlaceCoordinator,
   PlaceCategory,
+  PlaceSummaryCard,
   ProfileResponse,
   Schedule,
   Trip,
   TripDetail,
   TripParticipant,
+  CoordinatorRole,
+  OptionalExpense,
   TravelerDetail,
+  Traveler,
   UserDetail,
 } from '@/types/api';
 
@@ -140,11 +148,28 @@ export const usePlaceDetailQuery = (placeId?: number, options?: BaseOptions<Plac
     ...options,
   });
 
+export const usePlaceSummaryCardQuery = (placeId?: number, options?: BaseOptions<PlaceSummaryCard>) =>
+  useQuery({
+    queryKey: ['places', placeId, 'summary-card'],
+    queryFn: () => getPlaceSummaryCard(placeId!),
+    enabled: typeof placeId === 'number',
+    staleTime: 1000 * 60 * 5,
+    ...options,
+  });
+
 export const useCategoriesQuery = (options?: BaseOptions<PlaceCategory[]>) =>
   useQuery({
     queryKey: ['place-categories'],
     queryFn: listCategories,
     staleTime: 1000 * 60 * 10,
+    ...options,
+  });
+
+export const useCoordinatorRolesQuery = (options?: BaseOptions<CoordinatorRole[]>) =>
+  useQuery({
+    queryKey: ['coordinator-roles'],
+    queryFn: listCoordinatorRoles,
+    staleTime: 1000 * 60 * 60,
     ...options,
   });
 
@@ -157,6 +182,18 @@ export const usePlaceCoordinatorsQuery = (
     queryFn: () => listPlaceCoordinators(placeId!),
     enabled: typeof placeId === 'number',
     staleTime: 1000 * 60 * 10,
+    ...options,
+  });
+
+export const useOptionalExpensesQuery = (
+  placeId?: number,
+  options?: BaseOptions<OptionalExpense[]>,
+) =>
+  useQuery({
+    queryKey: ['places', placeId, 'expenses'],
+    queryFn: () => listOptionalExpenses(placeId!),
+    enabled: typeof placeId === 'number',
+    staleTime: 1000 * 60 * 5,
     ...options,
   });
 
@@ -197,5 +234,13 @@ export const useTravelerDetailQuery = (
     queryFn: () => getTravelerDetail(travelerId!),
     enabled: typeof travelerId === 'number',
     staleTime: 1000 * 60 * 5,
+    ...options,
+  });
+
+export const useTravelersQuery = (options?: BaseOptions<Traveler[]>) =>
+  useQuery({
+    queryKey: ['travelers'],
+    queryFn: listTravelers,
+    staleTime: 1000 * 60 * 10,
     ...options,
   });
