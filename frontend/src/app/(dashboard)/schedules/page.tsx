@@ -205,7 +205,7 @@ export default function SchedulesPage() {
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.7fr_1fr]">
+      <section>
         <article className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-start justify-between">
             <div>
@@ -267,36 +267,9 @@ export default function SchedulesPage() {
             </div>
           ))}
         </article>
-
-        <aside className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">오늘의 하이라이트</h2>
-          <p className="text-sm text-slate-500">다가오는 일정 요약과 담당자 공유 메모입니다.</p>
-          <div className="space-y-3">
-            {upcoming.length === 0 && (
-              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                표시할 일정이 없습니다.
-              </div>
-            )}
-            {upcoming.map((item) => (
-              <div key={item.id} className="rounded-2xl border border-slate-100 bg-[#E8F1FF] p-4 shadow-inner">
-                <p className="text-sm font-semibold text-slate-900">{item.main_content ?? item.place_name}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {item.start_time.slice(0, 5)} · {item.meeting_point ?? '집결지 미정'}
-                </p>
-                <p className="mt-2 text-xs text-slate-400">담당자에게 안전 가이드를 미리 공유하세요.</p>
-              </div>
-            ))}
-          </div>
-          <div className="rounded-2xl border border-slate-100 bg-[#F9FBFF] p-4 text-xs text-slate-500">
-            <p className="font-semibold text-slate-800">현장 메모</p>
-            <p className="mt-1 leading-relaxed">
-              이동 시간에 맞춰 현장 스태프에게 도착 알림을 발송하고, 날씨에 따라 대체 일정을 준비해 주세요.
-            </p>
-          </div>
-        </aside>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
+      <section>
         <article className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
@@ -440,24 +413,6 @@ export default function SchedulesPage() {
             </div>
           </form>
         </article>
-
-        <aside className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">등록 가이드</h2>
-          <ul className="space-y-3 text-sm text-slate-600">
-            <li className="rounded-xl border border-slate-100 bg-[#F9FBFF] p-4">
-              <span className="font-semibold text-slate-900">시간 형식</span>
-              <p className="mt-1 text-xs text-slate-500">24시간 형식으로 입력하면 자동으로 서버 형식에 맞춰집니다.</p>
-            </li>
-            <li className="rounded-xl border border-slate-100 bg-[#F9FBFF] p-4">
-              <span className="font-semibold text-slate-900">집결지</span>
-              <p className="mt-1 text-xs text-slate-500">집결지를 입력하면 참가자 카드와 자동 연동됩니다.</p>
-            </li>
-            <li className="rounded-xl border border-slate-100 bg-[#F9FBFF] p-4">
-              <span className="font-semibold text-slate-900">예산</span>
-              <p className="mt-1 text-xs text-slate-500">예산을 비워두면 비용 통계에 포함되지 않습니다.</p>
-            </li>
-          </ul>
-        </aside>
       </section>
     </div>
   );
