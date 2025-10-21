@@ -71,6 +71,7 @@ class ScheduleSerializer(serializers.ModelSerializer):
             'start_time',
             'end_time',
             'duration_minutes',
+            'minimum_stay_minutes',
             'transport',
             'main_content',
             'meeting_point',
@@ -92,6 +93,17 @@ class ScheduleSerializer(serializers.ModelSerializer):
             'updated_at',
             'trip',
         ]
+
+    def validate_minimum_stay_minutes(self, value: int | None) -> int | None:
+        """최소 체류 시간은 1분 이상이어야 합니다."""
+
+        if value is None:
+            return value
+
+        if value <= 0:
+            raise serializers.ValidationError("최소 체류 시간은 1분 이상이어야 합니다.")
+
+        return value
 
     def get_duration_display(self, obj: Schedule) -> str:
         """

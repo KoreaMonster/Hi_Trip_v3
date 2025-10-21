@@ -9,6 +9,7 @@ from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import F
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -131,6 +132,7 @@ class ScheduleViewSet(TripLookupMixin, viewsets.ModelViewSet):
 
     DEFAULT_DAY_START = time(9, 0)
     DEFAULT_VISIT_MINUTES = 30
+    DEFAULT_TRAVEL_SECONDS = 30 * 60
 
     serializer_class = ScheduleSerializer
     permission_classes = [IsAuthenticated, IsApprovedStaff, IsTripCoordinator]
@@ -239,6 +241,13 @@ class ScheduleViewSet(TripLookupMixin, viewsets.ModelViewSet):
         current_datetime = base_datetime
 
         with transaction.atomic():
+            # 고유 제약 조건을 피하기 위해 기존 순서를 임시로 뒤쪽으로 밀어넣습니다.
+            offset = len(day_schedules) + 1
+            Schedule.objects.filter(
+                trip=trip,
+                day_number=day_number,
+            ).update(order=F("order") + offset)
+
             for index, schedule in enumerate(ordered_schedules):
                 visit_minutes = self._get_visit_minutes(schedule)
                 visit_delta = timedelta(minutes=visit_minutes)
@@ -321,14 +330,17 @@ class ScheduleViewSet(TripLookupMixin, viewsets.ModelViewSet):
     def _get_visit_minutes(self, schedule: Schedule) -> int:
         """각 일정의 체류 시간(분)을 계산합니다."""
 
+        if schedule.minimum_stay_minutes:
+            return schedule.minimum_stay_minutes
+
         place = schedule.place
         if place and place.activity_time:
             total_seconds = int(place.activity_time.total_seconds())
-            minutes = max(total_seconds // 60, self.DEFAULT_VISIT_MINUTES)
-            return minutes
+            minutes = total_seconds // 60
+            return minutes if minutes > 0 else self.DEFAULT_VISIT_MINUTES
 
-        if schedule.duration_minutes:
-            return max(schedule.duration_minutes, self.DEFAULT_VISIT_MINUTES)
+        if schedule.duration_minutes and schedule.duration_minutes > 0:
+            return schedule.duration_minutes
 
         return self.DEFAULT_VISIT_MINUTES
 
@@ -342,8 +354,8 @@ class ScheduleViewSet(TripLookupMixin, viewsets.ModelViewSet):
             destination = self._build_route_waypoint(nxt)
 
             if not origin or not destination:
-                # 좌표/Place ID가 없는 경우에는 이동 시간을 계산할 수 없어 0초로 간주합니다.
-                travel_seconds.append(0)
+                # 좌표/Place ID가 없는 경우에는 이동 시간을 계산할 수 없어 기본 이동 시간을 사용합니다.
+                travel_seconds.append(self.DEFAULT_TRAVEL_SECONDS)
                 continue
 
             try:
@@ -354,11 +366,13 @@ class ScheduleViewSet(TripLookupMixin, viewsets.ModelViewSet):
                 )
             except GoogleMapsError as exc:
                 logger.warning(
-                    "Routes API 호출 실패로 이동 시간을 0초로 처리합니다: %s", exc
+                    "Routes API 호출 실패로 기본 이동 시간(%s초)을 적용합니다: %s",
+                    self.DEFAULT_TRAVEL_SECONDS,
+                    exc,
                 )
-                travel_seconds.append(0)
+                travel_seconds.append(self.DEFAULT_TRAVEL_SECONDS)
             else:
-                travel_seconds.append(route.seconds)
+                travel_seconds.append(route.seconds or self.DEFAULT_TRAVEL_SECONDS)
 
         return travel_seconds
 

@@ -51,6 +51,13 @@ class Schedule(models.Model):
         editable=False  # 관리자 페이지에서 직접 수정하지 못하도록 설정
     )
 
+    minimum_stay_minutes = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="최소 체류 시간(분)",
+        help_text="일정 시간 재배치 시 보장해야 하는 최소 체류 시간"
+    )
+
     #일정관련 내용
     transport = models.CharField(
         max_length=50,
