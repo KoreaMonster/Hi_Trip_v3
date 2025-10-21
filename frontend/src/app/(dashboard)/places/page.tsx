@@ -14,32 +14,76 @@ import {
   Sparkles,
   Stars,
 } from 'lucide-react';
-import { useCategoriesQuery, usePlacesQuery, useSchedulesQuery } from '@/lib/queryHooks';
+import {
+  useCategoriesQuery,
+  usePlaceDetailQuery,
+  usePlacesQuery,
+  useSchedulesQuery,
+} from '@/lib/queryHooks';
 import { useScopedTrips } from '@/lib/useScopedTrips';
 import type { Place, PlaceAlternativeInfo } from '@/types/api';
 
-const parseAlternative = (
-  info: Place['alternative_place_info'] | Place['ai_alternative_place'],
+const normalizeAlternativeInfo = (
+  value: Place['alternative_place_info'] | Place['ai_alternative_place'],
 ): PlaceAlternativeInfo | null => {
-  if (!info) return null;
-  if (typeof info === 'string') {
+  if (!value) return null;
+  if (typeof value === 'string') {
     try {
-      const parsed = JSON.parse(info);
+      const parsed = JSON.parse(value);
       return typeof parsed === 'object' && parsed ? (parsed as PlaceAlternativeInfo) : null;
     } catch (error) {
       return null;
     }
   }
-  if (typeof info === 'object') {
-    return info as PlaceAlternativeInfo;
+  if (typeof value === 'object') {
+    return value as PlaceAlternativeInfo;
   }
   return null;
 };
 
+const parseAlternative = (
+  info: Place['alternative_place_info'],
+  fallback: Place['ai_alternative_place'],
+): PlaceAlternativeInfo | null => {
+  const normalized = normalizeAlternativeInfo(info);
+  const fallbackInfo = normalizeAlternativeInfo(fallback);
+  if (normalized && fallbackInfo) {
+    return { ...fallbackInfo, ...normalized };
+  }
+  return normalized ?? fallbackInfo;
+};
+
 const buildDescriptionLines = (text?: string | null) => {
   if (!text) return [] as string[];
-  const lines = text
-    .split(/\r?\n/) // 우선 줄바꿈 기준 분리
+
+  const trimmed = text.trim();
+  if (!trimmed) return [] as string[];
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) {
+      const normalized = parsed
+        .map((value) => (typeof value === 'string' ? value.trim() : ''))
+        .filter((value) => value.length > 0);
+      if (normalized.length > 0) {
+        return normalized.slice(0, 6);
+      }
+    }
+    if (typeof parsed === 'object' && parsed !== null) {
+      const aggregated = Object.values(parsed)
+        .flat()
+        .map((value) => (typeof value === 'string' ? value.trim() : ''))
+        .filter((value) => value.length > 0);
+      if (aggregated.length > 0) {
+        return aggregated.slice(0, 6);
+      }
+    }
+  } catch (error) {
+    // JSON으로 파싱되지 않는 경우는 기존 로직을 사용합니다.
+  }
+
+  const lines = trimmed
+    .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
@@ -47,8 +91,7 @@ const buildDescriptionLines = (text?: string | null) => {
     return lines.slice(0, 6);
   }
 
-  // 줄바꿈 기준이 아니라면 문장 단위로 재분리
-  return text
+  return trimmed
     .split(/(?<=[.!?])\s+/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
@@ -283,7 +326,7 @@ export default function PlacesPage() {
           </div>
 
           <aside className="w-full max-w-xl space-y-5 xl:w-[360px]">
-            <PlaceDetailsPanel place={activePlace} />
+            <PlaceDetailsPanel placeId={activePlaceId} fallback={activePlace} />
 
             <div className="space-y-3 rounded-2xl border border-slate-100 bg-[#F9FBFF] p-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
@@ -418,8 +461,19 @@ function PlaceCard({ place, isActive, onSelect }: { place: Place; isActive: bool
   );
 }
 
-function PlaceDetailsPanel({ place }: { place: Place | null }) {
-  if (!place) {
+function PlaceDetailsPanel({
+  placeId,
+  fallback,
+}: {
+  placeId: number | null;
+  fallback?: Place | null;
+}) {
+  const hasPlaceId = typeof placeId === 'number';
+  const { data: place, isLoading, isError } = usePlaceDetailQuery(placeId ?? undefined, {
+    enabled: hasPlaceId,
+  });
+
+  if (!hasPlaceId) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
         표시할 장소를 선택해 주세요.
@@ -427,8 +481,37 @@ function PlaceDetailsPanel({ place }: { place: Place | null }) {
     );
   }
 
-  const descriptionLines = buildDescriptionLines(place.ai_generated_info);
-  const alternative = parseAlternative(place.alternative_place_info ?? place.ai_alternative_place);
+  if (isError) {
+    return (
+      <div className="rounded-2xl border border-dashed border-rose-200 bg-rose-50 px-4 py-10 text-center text-sm text-rose-600">
+        장소 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
+      </div>
+    );
+  }
+
+  const resolvedPlace = place ?? fallback ?? null;
+
+  if (isLoading && !resolvedPlace) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500">
+        장소 정보를 불러오는 중입니다.
+      </div>
+    );
+  }
+
+  if (!resolvedPlace) {
+    return (
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+        표시할 장소를 선택해 주세요.
+      </div>
+    );
+  }
+
+  const descriptionLines = buildDescriptionLines(resolvedPlace.ai_generated_info);
+  const alternative = parseAlternative(
+    resolvedPlace.alternative_place_info,
+    resolvedPlace.ai_alternative_place,
+  );
 
   return (
     <div className="space-y-5">
@@ -439,16 +522,16 @@ function PlaceDetailsPanel({ place }: { place: Place | null }) {
             <p className="text-xs text-slate-500">담당자와 공유할 기본 정보를 확인하세요.</p>
           </div>
           <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
-            <Compass className="h-3.5 w-3.5" /> {place.category?.name ?? '미분류'}
+            <Compass className="h-3.5 w-3.5" /> {resolvedPlace.category?.name ?? '미분류'}
           </span>
         </header>
 
         <div className="grid gap-3 px-5 py-4 text-sm">
-          <InfoRow label="장소명" value={place.name} />
-          <InfoRow label="주소" value={place.address ?? '주소 정보 없음'} />
-          <InfoRow label="입장료" value={place.entrance_fee_display ?? '미등록'} />
-          <InfoRow label="권장 체류 시간" value={place.activity_time_display ?? '미등록'} />
-          <InfoRow label="집결지" value={place.ai_meeting_point ?? '집결지 미정'} />
+          <InfoRow label="장소명" value={resolvedPlace.name} />
+          <InfoRow label="주소" value={resolvedPlace.address ?? '주소 정보 없음'} />
+          <InfoRow label="입장료" value={resolvedPlace.entrance_fee_display ?? '미등록'} />
+          <InfoRow label="권장 체류 시간" value={resolvedPlace.activity_time_display ?? '미등록'} />
+          <InfoRow label="집결지" value={resolvedPlace.ai_meeting_point ?? '집결지 미정'} />
         </div>
       </section>
 

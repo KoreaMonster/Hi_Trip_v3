@@ -21,27 +21,71 @@ import {
 import { usePlaceDetailQuery, usePlaceCoordinatorsQuery } from '@/lib/queryHooks';
 import type { Place, PlaceAlternativeInfo } from '@/types/api';
 
-const parseAlternative = (
-  info: Place['alternative_place_info'] | Place['ai_alternative_place'],
+const normalizeAlternativeInfo = (
+  value: Place['alternative_place_info'] | Place['ai_alternative_place'],
 ): PlaceAlternativeInfo | null => {
-  if (!info) return null;
-  if (typeof info === 'object') return info as PlaceAlternativeInfo;
-  try {
-    const parsed = JSON.parse(info);
-    return typeof parsed === 'object' && parsed ? (parsed as PlaceAlternativeInfo) : null;
-  } catch (error) {
-    return null;
+  if (!value) return null;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return typeof parsed === 'object' && parsed ? (parsed as PlaceAlternativeInfo) : null;
+    } catch (error) {
+      return null;
+    }
   }
+  if (typeof value === 'object') {
+    return value as PlaceAlternativeInfo;
+  }
+  return null;
+};
+
+const parseAlternative = (
+  info: Place['alternative_place_info'],
+  fallback: Place['ai_alternative_place'],
+): PlaceAlternativeInfo | null => {
+  const normalized = normalizeAlternativeInfo(info);
+  const fallbackInfo = normalizeAlternativeInfo(fallback);
+  if (normalized && fallbackInfo) {
+    return { ...fallbackInfo, ...normalized };
+  }
+  return normalized ?? fallbackInfo;
 };
 
 const buildDescriptionLines = (text?: string | null) => {
   if (!text) return [] as string[];
-  const lines = text
+
+  const trimmed = text.trim();
+  if (!trimmed) return [] as string[];
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) {
+      const normalized = parsed
+        .map((value) => (typeof value === 'string' ? value.trim() : ''))
+        .filter((value) => value.length > 0);
+      if (normalized.length > 0) {
+        return normalized.slice(0, 8);
+      }
+    }
+    if (typeof parsed === 'object' && parsed !== null) {
+      const aggregated = Object.values(parsed)
+        .flat()
+        .map((value) => (typeof value === 'string' ? value.trim() : ''))
+        .filter((value) => value.length > 0);
+      if (aggregated.length > 0) {
+        return aggregated.slice(0, 8);
+      }
+    }
+  } catch (error) {
+    // JSON 파싱에 실패하면 기존 로직을 사용합니다.
+  }
+
+  const lines = trimmed
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
   if (lines.length >= 4) return lines.slice(0, 8);
-  return text
+  return trimmed
     .split(/(?<=[.!?])\s+/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
@@ -93,7 +137,7 @@ export default function PlaceDetailPage() {
   }
 
   const descriptionLines = buildDescriptionLines(place.ai_generated_info);
-  const alternative = parseAlternative(place.alternative_place_info ?? place.ai_alternative_place);
+  const alternative = parseAlternative(place.alternative_place_info, place.ai_alternative_place);
 
   return (
     <div className="space-y-6">
