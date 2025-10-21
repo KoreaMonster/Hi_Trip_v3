@@ -101,6 +101,19 @@ export type TripCreate = {
   end_date: string;
 };
 
+export type TripUpdate = Partial<
+  TripCreate & {
+    status?: TripStatus;
+    manager?: number | null;
+    heart_rate_min?: number | null;
+    heart_rate_max?: number | null;
+    spo2_min?: string | null;
+    geofence_center_lat?: string | null;
+    geofence_center_lng?: string | null;
+    geofence_radius_km?: string | null;
+  }
+>;
+
 export type TripDetail = Trip & {
   invite_code: string;
   participant_count: number;
@@ -156,6 +169,11 @@ export type TripParticipant = {
   joined_date: string;
 };
 
+export type TripParticipantCreate = {
+  traveler_id: number;
+  invite_code?: string;
+};
+
 // ─── Schedules ────────────────────────────────────────────────────────────────
 export type Schedule = {
   id: number;
@@ -188,6 +206,12 @@ export type ScheduleCreate = {
   budget?: number | null;
   order?: number;
 };
+
+export type ScheduleUpdate = Partial<
+  ScheduleCreate & {
+    minimum_stay_minutes?: number | null;
+  }
+>;
 
 export type ScheduleRebalanceRequest = {
   day_number: number;
@@ -249,6 +273,23 @@ export type Place = {
   updated_at: string;
 };
 
+export type PlaceCreate = {
+  name: string;
+  address?: string | null;
+  category_id?: number | null;
+  entrance_fee?: number | null;
+  activity_time?: string | null;
+  ai_generated_info?: string | null;
+  ai_meeting_point?: string | null;
+  ai_alternative_place?: PlaceAlternativeInfo | string | null;
+};
+
+export type PlaceUpdate = Partial<
+  PlaceCreate & {
+    image?: string | null;
+  }
+>;
+
 export type CoordinatorRole = {
   id: number;
   name: string;
@@ -267,3 +308,102 @@ export type PlaceCoordinator = {
   created_at: string;
   updated_at: string;
 };
+
+export type PlaceCoordinatorCreate = {
+  role_id: number;
+  name: string;
+  phone: string;
+  note?: string | null;
+};
+
+export type PlaceCoordinatorUpdate = Partial<PlaceCoordinatorCreate>;
+
+export type PlaceSummaryCard = {
+  id: number;
+  place_id: number;
+  generated_lines: string[];
+  sources: string[];
+  generator: string | null;
+  generated_at: string | null;
+  cached_at: string | null;
+  is_cache_valid: boolean;
+  created_by: string | null;
+  updates: Array<{
+    id: number;
+    title: string;
+    description: string;
+    source_url: string | null;
+    published_at: string | null;
+    is_official: boolean;
+    is_recent: boolean;
+    sources: Array<{
+      id: number;
+      name: string;
+      url: string | null;
+      note: string | null;
+    }>;
+  }>;
+};
+
+export type PlaceSummaryRefreshRequest = {
+  force_refresh?: boolean;
+  memo?: string | null;
+};
+
+export type OptionalExpense = {
+  id: number;
+  place: number;
+  item_name: string;
+  price: number;
+  description: string | null;
+  display_order: number | null;
+  price_display?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type OptionalExpenseCreate = {
+  item_name: string;
+  price: number;
+  description?: string | null;
+  display_order?: number | null;
+};
+
+export type OptionalExpenseUpdate = Partial<OptionalExpenseCreate>;
+
+export type OptionalExpenseSelection = {
+  expense_ids: number[];
+};
+
+export type OptionalExpenseTotal = {
+  total: number;
+  count: number;
+  items: Array<{
+    id: number;
+    item_name: string;
+    price: number;
+    price_display: string | null;
+    place_name: string;
+    description: string;
+  }>;
+  formatted_total: string;
+};
+
+export type StaffRegisterRequest = {
+  username: string;
+  email: string;
+  password: string;
+  phone: string;
+  first_name: string;
+  last_name: string;
+  first_name_kr: string;
+  last_name_kr: string;
+  role: UserDetail['role'];
+};
+
+export type StaffUpdateRequest = Partial<
+  Omit<StaffRegisterRequest, 'password'> & {
+    password?: string;
+    is_approved?: boolean;
+  }
+>;
