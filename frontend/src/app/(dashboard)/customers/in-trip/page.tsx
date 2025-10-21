@@ -11,9 +11,11 @@ import {
   Droplet,
   PlayCircle,
   RefreshCcw,
+  ShieldCheck,
+  Users,
 } from 'lucide-react';
 import { postMonitoringGenerateDemo } from '@/lib/api';
-import { useMonitoringLatestQuery, useTripsQuery } from '@/lib/queryHooks';
+import { useHealthQuery, useMonitoringLatestQuery, useTripsQuery } from '@/lib/queryHooks';
 import type { MonitoringDemoResponse, ParticipantLatest, Trip } from '@/types/api';
 
 const statusMeta: Record<string, { label: string; tone: string }> = {
@@ -72,6 +74,54 @@ const findLastUpdated = (snapshots: ParticipantLatest[]): string | null => {
     return new Date(current).getTime() > new Date(latest).getTime() ? current : latest;
   });
 };
+
+const formatDate = (value?: string | null) => {
+  if (!value) return '—';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '—';
+  return parsed.toLocaleDateString('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+};
+
+const formatRange = (start?: string | null, end?: string | null) => {
+  const startLabel = formatDate(start);
+  const endLabel = formatDate(end);
+  if (startLabel === '—' && endLabel === '—') {
+    return '일정 정보 없음';
+  }
+  if (startLabel === '—' || endLabel === '—') {
+    return `${startLabel} ~ ${endLabel}`;
+  }
+  return `${startLabel} ~ ${endLabel}`;
+};
+
+const normalizeStatus = (snapshot: ParticipantLatest): 'danger' | 'warning' | 'normal' | 'unknown' => {
+  const status = snapshot.health?.status?.toLowerCase();
+  if (!status) {
+    return 'unknown';
+  }
+  if (status.includes('danger') || status.includes('critical') || status.includes('위험')) {
+    return 'danger';
+  }
+  if (status.includes('warning') || status.includes('caution') || status.includes('주의')) {
+    return 'warning';
+  }
+  if (status.includes('normal') || status.includes('정상')) {
+    return 'normal';
+  }
+  return statusMeta[status]?.label === statusMeta.danger.label
+    ? 'danger'
+    : statusMeta[status]?.label === statusMeta.warning.label
+      ? 'warning'
+      : statusMeta[status]?.label === statusMeta.normal.label
+        ? 'normal'
+        : 'unknown';
+};
+
+const formatNumber = (value: number) => new Intl.NumberFormat('ko-KR').format(value);
 
 export default function InTripCustomersPage() {
   const router = useRouter();
@@ -146,6 +196,13 @@ export default function InTripCustomersPage() {
   );
 
   const {
+    data: health,
+    isLoading: healthLoading,
+    isError: healthIsError,
+    error: healthError,
+  } = useHealthQuery();
+
+  const {
     data: latest = [],
     isLoading: latestLoading,
     isFetching: latestFetching,
@@ -155,6 +212,8 @@ export default function InTripCustomersPage() {
   } = useMonitoringLatestQuery(selectedTripId ?? undefined, {
     enabled: typeof selectedTripId === 'number',
     refetchInterval: 1000 * 5,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: false,
     staleTime: 0,
   });
 
@@ -164,6 +223,8 @@ export default function InTripCustomersPage() {
     onSuccess: (payload) => {
       void queryClient.invalidateQueries({ queryKey: ['monitoring', 'alerts', selectedTripId] });
       void queryClient.invalidateQueries({ queryKey: ['monitoring', 'latest', selectedTripId] });
+      void queryClient.invalidateQueries({ queryKey: ['monitoring', 'history', selectedTripId], exact: false });
+      void refetchLatest();
       return payload;
     },
   });
@@ -175,15 +236,80 @@ export default function InTripCustomersPage() {
       : '모니터링 데이터를 불러오지 못했습니다.'
     : null;
 
+  const monitoringSummary = useMemo(() => {
+    const totalParticipants = selectedTrip?.participant_count ?? latest.length;
+    let normal = 0;
+    let warning = 0;
+    let danger = 0;
+    let unknown = 0;
+    let active = 0;
+
+    latest.forEach((item) => {
+      const category = normalizeStatus(item);
+      if (item.health) {
+        active += 1;
+      }
+      if (category === 'danger') {
+        danger += 1;
+      } else if (category === 'warning') {
+        warning += 1;
+      } else if (category === 'normal') {
+        normal += 1;
+      } else {
+        unknown += 1;
+      }
+    });
+
+    const offline = Math.max(0, totalParticipants - active);
+
+    return {
+      total: totalParticipants,
+      normal,
+      warning,
+      danger,
+      unknown,
+      active,
+      offline,
+    };
+  }, [latest, selectedTrip?.participant_count]);
+
+  const backendStatusLabel = healthLoading
+    ? '상태 확인 중'
+    : healthIsError
+      ? '연결 실패'
+      : health?.status === 'ok'
+        ? '정상'
+        : '점검 필요';
+
+  const backendStatusDescription = healthLoading
+    ? '모니터링 API 상태를 확인하고 있습니다.'
+    : healthIsError
+      ? healthError instanceof Error
+        ? healthError.message
+        : '백엔드 상태 확인에 실패했습니다.'
+      : health?.message ?? '모니터링 API 응답을 수신했습니다.';
+
+  const backendIconTone = healthLoading
+    ? 'text-slate-400'
+    : healthIsError || health?.status !== 'ok'
+      ? 'text-rose-500'
+      : 'text-emerald-500';
+
+  const backendLabelTone = healthLoading
+    ? 'text-slate-900'
+    : healthIsError || health?.status !== 'ok'
+      ? 'text-rose-600'
+      : 'text-emerald-600';
+
   const handleGenerateClick = () => {
-    if (!selectedTripId || generateMutation.isPending) {
+    if (selectedTripId === null || generateMutation.isPending) {
       return;
     }
     generateMutation.mutate();
   };
 
   const handleRowClick = (participantId: number) => {
-    if (!selectedTripId) return;
+    if (selectedTripId === null) return;
     router.push(`/customers/in-trip/${participantId}?tripId=${selectedTripId}`);
   };
 
@@ -232,19 +358,57 @@ export default function InTripCustomersPage() {
               type="button"
               onClick={() => refetchLatest()}
               className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600"
-              disabled={latestLoading || !selectedTripId}
+              disabled={latestLoading || selectedTripId === null}
             >
               <RefreshCcw className={`h-4 w-4 ${latestFetching ? 'animate-spin text-primary-500' : ''}`} /> 수동 새로고침
             </button>
             <button
               type="button"
               onClick={handleGenerateClick}
-              disabled={!selectedTripId || generateMutation.isPending}
+              disabled={selectedTripId === null || generateMutation.isPending}
               className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-70"
             >
               <PlayCircle className={generateMutation.isPending ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
               데이터 생성
             </button>
+          </div>
+        </div>
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl border border-slate-100 bg-[#F5FAFF] p-4">
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">백엔드 상태</p>
+            <div className={`mt-2 flex items-center gap-2 text-lg font-semibold ${backendLabelTone}`}>
+              <ShieldCheck className={`h-5 w-5 ${backendIconTone}`} />
+              {backendStatusLabel}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">{backendStatusDescription}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-100 bg-[#F9FBFF] p-4">
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">실시간 수집 인원</p>
+            <div className="mt-2 flex items-center gap-2 text-2xl font-bold text-slate-900">
+              <Users className="h-5 w-5 text-primary-500" />
+              {formatNumber(monitoringSummary.active)}명
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              총 {formatNumber(monitoringSummary.total)}명 중 {formatNumber(monitoringSummary.offline)}명 대기 중
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-100 bg-[#FFF7ED] p-4">
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">이상 징후 감지</p>
+            <div className="mt-2 flex items-baseline gap-3">
+              <span className="text-2xl font-bold text-rose-600">{formatNumber(monitoringSummary.danger)} 위험</span>
+              <span className="text-lg font-semibold text-amber-600">{formatNumber(monitoringSummary.warning)} 주의</span>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">정상 {formatNumber(monitoringSummary.normal)}명 · 수집 대기 {formatNumber(monitoringSummary.unknown)}명</p>
+          </div>
+          <div className="rounded-2xl border border-slate-100 bg-[#ECFDF5] p-4">
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">마지막 수집 시각</p>
+            <div className="mt-2 flex items-center gap-2 text-lg font-semibold text-slate-900">
+              <Clock3 className="h-5 w-5 text-emerald-500" />
+              {lastUpdated ? formatMeasuredAt(lastUpdated) : '데이터 수집 대기 중'}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              {latestFetching ? '실시간 동기화 중입니다.' : '5초 간격으로 자동 새로고침됩니다.'}
+            </p>
           </div>
         </div>
         {generateMutation.isSuccess && generateMutation.data && (
@@ -257,6 +421,49 @@ export default function InTripCustomersPage() {
           <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
             데이터를 생성하지 못했습니다. 다시 시도해 주세요.
           </div>
+        )}
+        {ongoingTrips.length > 0 ? (
+          <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200">
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead className="bg-[#F7F9FC] text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold">구분</th>
+                  <th className="px-4 py-3 text-left font-semibold">여행명</th>
+                  <th className="px-4 py-3 text-left font-semibold">여행 일정</th>
+                  <th className="px-4 py-3 text-left font-semibold">참가자 수</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 bg-white">
+                {ongoingTrips.map((trip, index) => {
+                  const isActive = trip.id === selectedTripId;
+                  return (
+                    <tr
+                      key={trip.id}
+                      onClick={() => setSelectedTripId(trip.id)}
+                      className={`cursor-pointer transition ${
+                        isActive ? 'bg-primary-50/60' : 'hover:bg-primary-50/40'
+                      }`}
+                    >
+                      <td className="px-4 py-3 font-semibold text-slate-600">{index + 1}</td>
+                      <td className="px-4 py-3 text-slate-800">{trip.title}</td>
+                      <td className="px-4 py-3 text-slate-500">{formatRange(trip.start_date, trip.end_date)}</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {typeof trip.participant_count === 'number'
+                          ? `${formatNumber(trip.participant_count)}명`
+                          : '집계 중'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          !tripsLoading && (
+            <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+              진행 중인 여행이 없습니다. 여행을 ‘진행 중’으로 설정하면 자동으로 목록이 채워집니다.
+            </div>
+          )
         )}
       </section>
 
