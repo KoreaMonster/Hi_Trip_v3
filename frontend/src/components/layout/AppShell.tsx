@@ -75,7 +75,27 @@ export default function AppShell({ children }: { children: ReactNode }) {
     }
 
     const apiError = profileError instanceof ApiError ? profileError : null;
-    if (apiError?.status === 401) {
+    const shouldRedirectToLogin = (() => {
+      if (!apiError) return false;
+      if (apiError.status === 401) return true;
+      if (apiError.status !== 403) return false;
+      if (!apiError.body) return false;
+      if (typeof apiError.body === 'string') {
+        return apiError.body.includes('Authentication credentials were not provided');
+      }
+      const detail = apiError.body.detail ?? apiError.body.non_field_errors;
+      if (typeof detail === 'string') {
+        return detail.includes('Authentication credentials were not provided');
+      }
+      if (Array.isArray(detail)) {
+        return detail.some(
+          (item) => typeof item === 'string' && item.includes('Authentication credentials were not provided'),
+        );
+      }
+      return false;
+    })();
+
+    if (shouldRedirectToLogin) {
       clearUser();
       router.replace('/login');
       return;

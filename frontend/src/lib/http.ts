@@ -17,6 +17,8 @@ export class ApiError extends Error {
   }
 }
 
+const CSRF_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE']);
+
 const resolveBaseUrl = (): string => {
   const globalProcess = (globalThis as unknown as {
     process?: { env?: Record<string, string | undefined> };
@@ -36,6 +38,23 @@ const resolveBaseUrl = (): string => {
 
 const normalizedBaseUrl = resolveBaseUrl().replace(/\/$/, '');
 
+const readCsrfToken = (): string | null => {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  const cookie = document.cookie
+    .split(';')
+    .map((value) => value.trim())
+    .find((value) => value.startsWith('csrftoken='));
+
+  if (!cookie) {
+    return null;
+  }
+
+  return decodeURIComponent(cookie.split('=').slice(1).join('='));
+};
+
 export const apiClient = ky.create({
   prefixUrl: normalizedBaseUrl.length > 0 ? `${normalizedBaseUrl}/` : undefined,
   credentials: 'include',
@@ -48,6 +67,13 @@ export const apiClient = ky.create({
       (request: Request) => {
         if (request.method !== 'GET' && !request.headers.has('Content-Type')) {
           request.headers.set('Content-Type', 'application/json');
+        }
+
+        if (!CSRF_SAFE_METHODS.has(request.method.toUpperCase())) {
+          const token = readCsrfToken();
+          if (token) {
+            request.headers.set('X-CSRFToken', token);
+          }
         }
       },
     ],
