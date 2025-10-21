@@ -1,16 +1,19 @@
 """Schedules 앱에서 사용할 Serializer 정의."""
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
-from typing import Any
+from typing import Any, Optional
 
 from .constants import FIXED_RECOMMENDATION_PLACE_TYPES, SUPPORTED_TRAVEL_MODES
 from .models import (
-    Schedule,
+    CoordinatorRole,
+    OptionalExpense,
     Place,
     PlaceCategory,
-    CoordinatorRole,
     PlaceCoordinator,
-    OptionalExpense,
+    PlaceSummaryCard,
+    PlaceUpdate,
+    PlaceUpdateSource,
+    Schedule,
 )
 
 
@@ -648,3 +651,104 @@ class ScheduleRebalanceRequestSerializer(serializers.Serializer):
         if not attrs.get("schedule_ids"):
             raise serializers.ValidationError("재배치할 일정 목록이 비어 있습니다.")
         return attrs
+
+
+# ============================================================================
+# 요약 카드 & 최신 소식 Serializer
+# ============================================================================
+
+
+class PlaceUpdateSourceSerializer(serializers.ModelSerializer):
+    """PlaceUpdateSource 모델을 직렬화하는 단순 Serializer."""
+
+    class Meta:
+        model = PlaceUpdateSource
+        fields = ["id", "name", "url", "note"]
+        read_only_fields = fields
+
+
+class PlaceUpdateSerializer(serializers.ModelSerializer):
+    """요약 카드에 포함될 최신 소식 정보를 표현."""
+
+    sources = PlaceUpdateSourceSerializer(
+        many=True,
+        read_only=True,
+        help_text="요약 생성 시 참고한 추가 출처 목록",
+    )
+
+    class Meta:
+        model = PlaceUpdate
+        fields = [
+            "id",
+            "title",
+            "description",
+            "source_url",
+            "published_at",
+            "is_official",
+            "is_recent",
+            "sources",
+        ]
+        read_only_fields = fields
+
+
+class SummaryGenerationRequestSerializer(serializers.Serializer):
+    """요약 카드 재생성 요청 본문을 검증."""
+
+    force_refresh = serializers.BooleanField(
+        default=False,
+        required=False,
+        help_text="True로 전달하면 24시간 캐시를 무시하고 Perplexity를 즉시 호출합니다.",
+    )
+    memo = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="운영자가 남기는 메모. 로깅 용도로만 사용되며 DB에는 저장하지 않습니다.",
+    )
+
+
+class PlaceSummaryCardSerializer(serializers.ModelSerializer):
+    """PlaceSummaryCard 모델을 클라이언트에 전달."""
+
+    place_id = serializers.IntegerField(
+        source="place.id",
+        read_only=True,
+        help_text="요약 카드가 연결된 Place ID",
+    )
+    created_by = serializers.SerializerMethodField(help_text="요약을 생성한 직원")
+    updates = PlaceUpdateSerializer(
+        many=True,
+        read_only=True,
+        help_text="14일 내 최신 소식을 포함한 업데이트 목록",
+    )
+    is_cache_valid = serializers.SerializerMethodField(
+        help_text="캐시가 아직 24시간 이내인지 여부",
+    )
+
+    class Meta:
+        model = PlaceSummaryCard
+        fields = [
+            "id",
+            "place_id",
+            "generated_lines",
+            "sources",
+            "generator",
+            "generated_at",
+            "cached_at",
+            "is_cache_valid",
+            "created_by",
+            "updates",
+        ]
+        read_only_fields = fields
+
+    def get_created_by(self, obj: PlaceSummaryCard) -> Optional[str]:
+        user = obj.created_by
+        if not user:
+            return None
+        if hasattr(user, "get_full_name"):
+            full_name = user.get_full_name()
+            if full_name:
+                return full_name
+        return getattr(user, "username", str(user))
+
+    def get_is_cache_valid(self, obj: PlaceSummaryCard) -> bool:
+        return obj.is_cache_valid

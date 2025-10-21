@@ -15,6 +15,7 @@ from .views import (
     PlaceCoordinatorViewSet,
     PlaceRecommendationViewSet,
     PlaceViewSet,
+    PlaceSummaryCardViewSet,
     ScheduleViewSet,
 )
 
@@ -33,6 +34,7 @@ router.register(
 place_router = NestedSimpleRouter(router, r"places", lookup="place")
 place_router.register("expenses", OptionalExpenseViewSet, basename="place-expense")
 place_router.register("coordinators", PlaceCoordinatorViewSet, basename="place-coordinator")
+place_router.register("summary-card", PlaceSummaryCardViewSet, basename="place-summary-card")
 
 # 여행 하위 일정 라우터: trips 앱에서 사용 중인 router를 재활용합니다.
 trip_schedule_router = NestedSimpleRouter(trips_router, r"trips", lookup="trip")

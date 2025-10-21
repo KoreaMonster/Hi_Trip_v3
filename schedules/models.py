@@ -1,7 +1,10 @@
-from django.db import models
-from django.core.exceptions import ValidationError
-from datetime import datetime, timezone
 import os
+from datetime import datetime, timedelta
+
+from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.db import models
+from django.utils import timezone
 
 class Schedule(models.Model):
     """
@@ -698,9 +701,242 @@ class PlaceCoordinator(models.Model):
         return bool(self.note and self.note.strip())'''''
 
 
-# schedules/models.py
+class PlaceUpdateSource(models.Model):
+    """요약 카드 작성 시 참고한 외부/내부 출처 URL 정보를 보관하는 테이블."""
 
-# ... (이전 모델들은 유지)
+    name = models.CharField(
+        max_length=100,
+        verbose_name="출처 이름",
+        help_text="예: 서울시 문화재청 블로그, 이용자 후기",
+    )
+    url = models.URLField(
+        verbose_name="참고 URL",
+        help_text="Perplexity에 전달한 실제 주소. 운영 팀이 직접 관리합니다.",
+    )
+    note = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name="비고",
+        help_text="출처 활용 시 주의사항이나 핵심 키워드를 짧게 정리합니다.",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="등록일시")
+
+    class Meta:
+        verbose_name = "장소 업데이트 출처"
+        verbose_name_plural = "장소 업데이트 출처 목록"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return f"{self.name}"
+
+
+class PlaceSummaryCardQuerySet(models.QuerySet):
+    """PlaceSummaryCard 전용 QuerySet 도우미."""
+
+    def with_recent_updates(self):
+        """14일 내 최신 업데이트를 Prefetch하여 N+1 쿼리를 방지합니다."""
+
+        return self.prefetch_related(
+            models.Prefetch(
+                "updates",
+                queryset=PlaceUpdate.objects.recent().select_related("summary_card"),
+            ),
+            "updates__sources",
+        )
+
+
+class PlaceSummaryCard(models.Model):
+    """AI가 생성한 장소 요약을 캐시하는 모델."""
+
+    CACHE_TTL_HOURS = 24
+
+    place = models.OneToOneField(
+        "Place",
+        on_delete=models.CASCADE,
+        related_name="summary_card",
+        verbose_name="대상 장소",
+        help_text="Place가 삭제되면 요약 카드도 함께 제거됩니다.",
+    )
+    generated_lines = models.JSONField(
+        default=list,
+        verbose_name="생성된 줄 목록",
+        help_text="줄 단위 요약 문장을 배열로 저장합니다. UI는 순서를 그대로 사용합니다.",
+    )
+    sources = models.JSONField(
+        default=list,
+        verbose_name="출처 메타데이터",
+        help_text="Validator를 통과한 출처 정보를 리스트로 보관합니다.",
+    )
+    ai_response = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="AI 원본 응답",
+        help_text="Perplexity 응답 전문(JSON)을 저장하여 재검증 시 활용합니다.",
+    )
+    generator = models.CharField(
+        max_length=50,
+        default="perplexity",
+        verbose_name="생성기 식별자",
+        help_text="어떤 AI 엔진이 응답을 생성했는지 기록합니다.",
+    )
+    generated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="AI 생성 시각",
+        help_text="Validator까지 통과한 응답이 저장된 시간입니다.",
+    )
+    cached_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="캐시 저장 시각",
+        help_text="동일 요청에 대해 재사용할 수 있는 기준 시각입니다 (기본 24시간).",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_summary_cards",
+        verbose_name="생성 요청자",
+        help_text="요약 생성 요청을 수행한 직원 계정. 실패 시에도 마지막 성공 요청자를 유지합니다.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="생성일시")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="수정일시")
+
+    objects = PlaceSummaryCardQuerySet.as_manager()
+
+    class Meta:
+        verbose_name = "장소 요약 카드"
+        verbose_name_plural = "장소 요약 카드 목록"
+
+    def __str__(self) -> str:
+        return f"{self.place.name} 요약 카드"
+
+    @property
+    def is_cache_valid(self) -> bool:
+        """캐시 만료 여부를 간단히 확인하는 헬퍼."""
+
+        if not self.cached_at:
+            return False
+        expiry = self.cached_at + timedelta(hours=self.CACHE_TTL_HOURS)
+        return timezone.now() < expiry
+
+    def mark_cached(self) -> None:
+        """캐시 시각을 현재로 갱신합니다."""
+
+        self.cached_at = timezone.now()
+        self.save(update_fields=["cached_at", "updated_at"])
+
+
+class PlaceUpdateQuerySet(models.QuerySet):
+    """PlaceUpdate용 QuerySet: 14일 내 최신 소식을 필터링하는 기능을 제공합니다."""
+
+    RECENT_DAYS = 14
+
+    def recent(self):
+        """RECENT_DAYS 이내에 발행된 업데이트만 반환합니다."""
+
+        threshold = timezone.now() - timedelta(days=self.RECENT_DAYS)
+        return self.filter(published_at__gte=threshold)
+
+
+class PlaceUpdate(models.Model):
+    """장소 최신 소식/공지 사항을 관리하는 모델."""
+
+    RECENT_DAYS = PlaceUpdateQuerySet.RECENT_DAYS
+
+    place = models.ForeignKey(
+        "Place",
+        on_delete=models.CASCADE,
+        related_name="place_updates",
+        verbose_name="대상 장소",
+        help_text="최신 소식이 적용되는 장소",
+    )
+    summary_card = models.ForeignKey(
+        PlaceSummaryCard,
+        on_delete=models.CASCADE,
+        related_name="updates",
+        verbose_name="대상 요약 카드",
+        help_text="요약 카드 삭제 시 연관된 업데이트도 함께 제거됩니다.",
+    )
+    title = models.CharField(
+        max_length=100,
+        verbose_name="업데이트 제목",
+        help_text="예: 봄 시즌 야간 개장, 주차장 공사 안내",
+    )
+    description = models.TextField(
+        verbose_name="상세 설명",
+        help_text="줄바꿈 포함 가능. 요약 생성 시 한 줄로 축약됩니다.",
+    )
+    source_url = models.URLField(
+        verbose_name="근거 URL",
+        help_text="안내 문구의 공식/비공식 출처 주소",
+    )
+    published_at = models.DateTimeField(
+        verbose_name="발행일시",
+        help_text="원본 공지/소식이 게시된 시간. 14일 경과 시 경고가 표시됩니다.",
+    )
+    is_official = models.BooleanField(
+        default=False,
+        verbose_name="공식 출처 여부",
+        help_text="관공서·공식 홈페이지 등 1차 출처라면 체크합니다.",
+    )
+    sources = models.ManyToManyField(
+        PlaceUpdateSource,
+        blank=True,
+        related_name="updates",
+        verbose_name="추가 참조 출처",
+        help_text="줄(라인)과 매핑되는 참고 URL. 중복 입력을 막기 위해 테이블로 분리했습니다.",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="등록일시")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="수정일시")
+
+    objects = PlaceUpdateQuerySet.as_manager()
+
+    class Meta:
+        verbose_name = "장소 최신 소식"
+        verbose_name_plural = "장소 최신 소식 목록"
+        ordering = ["-published_at"]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.summary_card.place.name})"
+
+    @property
+    def is_recent(self) -> bool:
+        """RECENT_DAYS 규칙에 따라 최신 소식인지 여부를 반환합니다."""
+
+        if not self.published_at:
+            return False
+        threshold = timezone.now() - timedelta(days=self.RECENT_DAYS)
+        return self.published_at >= threshold
+
+    def clean(self):
+        """URL 유효성 및 발행일시 체크를 통해 운영자 실수를 줄입니다."""
+
+        super().clean()
+        if self.published_at and self.published_at > timezone.now() + timedelta(minutes=5):
+            raise ValidationError({
+                "published_at": "미래 시각으로 저장할 수 없습니다. 실제 발행 시간을 입력하세요.",
+            })
+        if self.summary_card and self.place and self.summary_card.place_id != self.place_id:
+            raise ValidationError(
+                {
+                    "summary_card": "요약 카드와 장소 정보가 일치하지 않습니다.",
+                    "place": "요약 카드와 동일한 장소를 선택해주세요.",
+                }
+            )
+
+    def save(self, *args, **kwargs):
+        """Place 기준으로 SummaryCard를 자동 연결."""
+
+        if self.place_id and not self.summary_card_id:
+            summary_card, _ = PlaceSummaryCard.objects.get_or_create(place=self.place)
+            self.summary_card = summary_card
+        elif self.summary_card_id and not self.place_id:
+            self.place = self.summary_card.place
+        super().save(*args, **kwargs)
 
 
 # ========== OptionalExpense 모델 (수정본) ==========
