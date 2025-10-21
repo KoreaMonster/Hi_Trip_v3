@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, type ReactNode } from 'react';
+import { use, useMemo, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
@@ -35,11 +35,15 @@ const formatCurrency = (value?: number | null) => {
 };
 
 type PageProps = {
-  params: { travelerId: string };
+  params: { travelerId: string } | Promise<{ travelerId: string }>;
 };
 
 export default function CustomerDetailPage({ params }: PageProps) {
-  const travelerId = Number(params.travelerId);
+  const resolvedParams =
+    typeof (params as PromiseLike<{ travelerId: string }>).then === 'function'
+      ? use(params as Promise<{ travelerId: string }>)
+      : (params as { travelerId: string });
+  const travelerId = Number(resolvedParams.travelerId);
   const searchParams = useSearchParams();
   const tripIdParam = searchParams.get('tripId');
   const contextTripId = tripIdParam ? Number(tripIdParam) : undefined;

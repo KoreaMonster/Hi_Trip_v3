@@ -1,8 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  ArrowUpRight,
   ChevronDown,
   HeartPulse,
   MapPin,
@@ -417,6 +419,7 @@ export default function MonitoringPage() {
                   <th className="px-4 py-3 text-left font-semibold">심박수</th>
                   <th className="px-4 py-3 text-left font-semibold">산소포화도</th>
                   <th className="px-4 py-3 text-right font-semibold">경보</th>
+                  <th className="px-4 py-3 text-right font-semibold">상세</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
@@ -424,14 +427,14 @@ export default function MonitoringPage() {
                   <>
                     {isDataLoading && (
                       <tr>
-                        <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-500">
+                        <td colSpan={10} className="px-4 py-6 text-center text-sm text-slate-500">
                           데이터를 불러오는 중입니다.
                         </td>
                       </tr>
                     )}
                     {!isDataLoading && sortedRows.length === 0 && (
                       <tr>
-                        <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-500">
+                        <td colSpan={10} className="px-4 py-6 text-center text-sm text-slate-500">
                           조회된 참가자 정보가 없습니다.
                         </td>
                       </tr>
@@ -472,13 +475,24 @@ export default function MonitoringPage() {
                           <td className="px-4 py-3 text-slate-700">{heartRate}</td>
                           <td className="px-4 py-3 text-slate-700">{spo2}</td>
                           <td className="px-4 py-3 text-right text-slate-600">{participantAlerts.length}건</td>
+                          <td className="px-4 py-3 text-right text-sm">
+                            <Link
+                              href={`/participants/${participant.id}${
+                                selectedTripId ? `?tripId=${selectedTripId}` : ''
+                              }`}
+                              className="inline-flex items-center gap-1 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600 shadow-sm transition hover:bg-primary-100"
+                            >
+                              상세 보기
+                              <ArrowUpRight className="h-3.5 w-3.5" />
+                            </Link>
+                          </td>
                         </tr>
                       );
                     })}
                   </>
                 ) : (
                   <tr>
-                    <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-500">
+                    <td colSpan={10} className="px-4 py-6 text-center text-sm text-slate-500">
                       {tripsLoading ? '여행 정보를 불러오는 중입니다.' : noGroupMessage}
                     </td>
                   </tr>

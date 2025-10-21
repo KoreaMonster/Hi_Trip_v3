@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo } from 'react';
+import { use, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -49,13 +49,22 @@ const formatDate = (value?: string) => {
 };
 
 type ParticipantDetailPageProps = {
-  params: { participantId: string };
-  searchParams?: { tripId?: string };
+  params: { participantId: string } | Promise<{ participantId: string }>;
+  searchParams?: { tripId?: string } | Promise<{ tripId?: string }>;
 };
 
 export default function ParticipantDetailPage({ params, searchParams }: ParticipantDetailPageProps) {
-  const participantId = Number(params.participantId);
-  const tripId = Number(searchParams?.tripId ?? '');
+  const resolvedParams =
+    typeof (params as PromiseLike<{ participantId: string }>).then === 'function'
+      ? use(params as Promise<{ participantId: string }>)
+      : (params as { participantId: string });
+  const resolvedSearchParams =
+    searchParams && typeof (searchParams as PromiseLike<{ tripId?: string }>).then === 'function'
+      ? use(searchParams as Promise<{ tripId?: string }>)
+      : (searchParams as { tripId?: string } | undefined);
+
+  const participantId = Number(resolvedParams.participantId);
+  const tripId = Number(resolvedSearchParams?.tripId ?? '');
   const router = useRouter();
   const isTripIdValid = Number.isFinite(tripId);
   const { data: tripDetail, isLoading, isError, error } = useTripDetailQuery(

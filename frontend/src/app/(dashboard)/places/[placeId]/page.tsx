@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, type ReactNode } from 'react';
+import { use, useMemo, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
@@ -77,11 +77,15 @@ const parseAlternative = (
 };
 
 type PageProps = {
-  params: { placeId: string };
+  params: { placeId: string } | Promise<{ placeId: string }>;
 };
 
 export default function PlaceDetailPage({ params }: PageProps) {
-  const placeId = Number(params.placeId);
+  const resolvedParams =
+    typeof (params as PromiseLike<{ placeId: string }>).then === 'function'
+      ? use(params as Promise<{ placeId: string }>)
+      : (params as { placeId: string });
+  const placeId = Number(resolvedParams.placeId);
   const searchParams = useSearchParams();
   const tripIdParam = searchParams.get('tripId');
   const contextTripId = tripIdParam ? Number(tripIdParam) : undefined;

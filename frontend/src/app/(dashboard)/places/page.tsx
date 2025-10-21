@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ArrowUpRight,
   ChevronDown,
   Clock4,
   Compass,
@@ -445,9 +446,10 @@ function PlaceDetailsPanel({ place, tripId }: { place: Place | null; tripId: num
             </span>
             <Link
               href={`/places/${place.id}${tripId ? `?tripId=${tripId}` : ''}`}
-              className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-primary-200 hover:text-primary-600"
+              className="inline-flex items-center gap-1 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600 shadow-sm transition hover:bg-primary-100"
             >
               상세 보기
+              <ArrowUpRight className="h-3.5 w-3.5" />
             </Link>
           </div>
         </header>
