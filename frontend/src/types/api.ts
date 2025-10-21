@@ -171,6 +171,32 @@ export type ScheduleCreate = {
   order?: number;
 };
 
+export type TravelMode = 'DRIVE' | 'WALK' | 'BICYCLE' | 'TRANSIT';
+
+export type ScheduleRebalanceRequest = {
+  day_number: number;
+  schedule_ids: number[];
+  travel_mode: TravelMode;
+  day_start_time?: string;
+};
+
+export type ScheduleRebalanceSegment = {
+  from_schedule_id: number;
+  to_schedule_id: number;
+  duration_seconds: number;
+  duration_text: string;
+};
+
+export type ScheduleRebalanceResponse = {
+  trip_id: number;
+  day_number: number;
+  travel_mode: TravelMode;
+  resolved_day_start: string;
+  rebalanced_at: string;
+  travel_segments: ScheduleRebalanceSegment[];
+  schedules: Schedule[];
+};
+
 // ─── Places ────────────────────────────────────────────────────────────────────
 export type PlaceCategory = {
   id: number;

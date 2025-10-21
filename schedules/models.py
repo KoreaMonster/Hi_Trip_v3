@@ -143,6 +143,25 @@ class Schedule(models.Model):
                 'day_number': '일차는 1 이상이어야 합니다.'
             })
 
+        # 동일한 여행·일차 안에서 시간이 겹치는지 확인
+        if (
+            self.trip_id
+            and self.day_number is not None
+            and self.start_time
+            and self.end_time
+        ):
+            overlapping = (
+                Schedule.objects.filter(trip_id=self.trip_id, day_number=self.day_number)
+                .exclude(pk=self.pk or None)
+                .filter(start_time__lt=self.end_time, end_time__gt=self.start_time)
+            )
+
+            if overlapping.exists():
+                raise ValidationError({
+                    'start_time': '같은 날에 등록된 다른 일정과 시간이 겹칩니다.',
+                    'end_time': '같은 날에 등록된 다른 일정과 시간이 겹칩니다.',
+                })
+
     def save(self, *args, **kwargs):
         """
         저장 시 자동으로 duration_minutes 계산

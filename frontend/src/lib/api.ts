@@ -13,6 +13,8 @@ import type {
   ProfileResponse,
   Schedule,
   ScheduleCreate,
+  ScheduleRebalanceRequest,
+  ScheduleRebalanceResponse,
   Trip,
   TripCreate,
   TripDetail,
@@ -185,6 +187,18 @@ export const createSchedule = async (
   body: ScheduleCreate,
 ): Promise<Schedule> =>
   apiRequest(() => apiClient.post(`api/trips/${tripId}/schedules/`, { json: body }).json<Schedule>());
+
+export const rebalanceTripSchedules = async (
+  tripId: number,
+  body: ScheduleRebalanceRequest,
+): Promise<ScheduleRebalanceResponse> =>
+  apiRequest(() =>
+    apiClient
+      .post(`api/trips/${tripId}/schedules/rebalance-day/`, {
+        json: body,
+      })
+      .json<ScheduleRebalanceResponse>(),
+  );
 
 export const listTripParticipants = listParticipants;
 

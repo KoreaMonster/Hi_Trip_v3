@@ -2,10 +2,16 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { CalendarClock, ChevronDown, Clock8, MapPin, Route } from 'lucide-react';
-import { createSchedule } from '@/lib/api';
+import { CalendarClock, ChevronDown, Clock8, MapPin, RefreshCcw, Route } from 'lucide-react';
+import { createSchedule, rebalanceTripSchedules } from '@/lib/api';
 import { useSchedulesQuery, useTripsQuery } from '@/lib/queryHooks';
-import type { Schedule, ScheduleCreate, Trip } from '@/types/api';
+import type {
+  Schedule,
+  ScheduleCreate,
+  ScheduleRebalanceRequest,
+  TravelMode,
+  Trip,
+} from '@/types/api';
 
 const minutesToLabel = (minutes?: number | null) => {
   if (!minutes) return '소요 시간 정보 없음';
@@ -36,6 +42,12 @@ export default function SchedulesPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [rebalanceDay, setRebalanceDay] = useState<number | null>(null);
+  const [rebalanceMode, setRebalanceMode] = useState<TravelMode>('DRIVE');
+  const [rebalanceStartTime, setRebalanceStartTime] = useState('09:00');
+  const [rebalanceFeedback, setRebalanceFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(
+    null,
+  );
 
   useEffect(() => {
     if (trips.length > 0 && selectedTripId === null) {
@@ -72,6 +84,34 @@ export default function SchedulesPage() {
 
   const upcoming = grouped[0]?.items.slice(0, 2) ?? [];
 
+  useEffect(() => {
+    if (grouped.length > 0) {
+      setRebalanceDay((current) => current ?? grouped[0].day);
+    } else {
+      setRebalanceDay(null);
+    }
+  }, [grouped]);
+
+  useEffect(() => {
+    if (!rebalanceDay) {
+      return;
+    }
+
+    const target = grouped.find((group) => group.day === rebalanceDay);
+    if (!target || target.items.length === 0) {
+      return;
+    }
+
+    const earliest = target.items.reduce((selected, current) => {
+      if (!selected) {
+        return current;
+      }
+      return current.start_time < selected.start_time ? current : selected;
+    }, target.items[0]);
+
+    setRebalanceStartTime(earliest.start_time.slice(0, 5));
+  }, [grouped, rebalanceDay]);
+
   const createScheduleMutation = useMutation({
     mutationFn: ({ tripId, payload }: { tripId: number; payload: ScheduleCreate }) =>
       createSchedule(tripId, payload),
@@ -88,6 +128,20 @@ export default function SchedulesPage() {
     },
     onSettled: () => {
       setIsSubmitting(false);
+    },
+  });
+
+  const rebalanceMutation = useMutation({
+    mutationFn: ({ tripId, payload }: { tripId: number; payload: ScheduleRebalanceRequest }) =>
+      rebalanceTripSchedules(tripId, payload),
+    onSuccess: async (response, variables) => {
+      setRebalanceFeedback({ type: 'success', message: `DAY ${response.day_number} 일정이 재배치되었습니다.` });
+      await queryClient.invalidateQueries({ queryKey: ['trips', variables.tripId, 'schedules'] });
+    },
+    onError: (error) => {
+      const message =
+        error instanceof Error ? error.message : '일정을 재배치하는 동안 오류가 발생했습니다. 다시 시도해 주세요.';
+      setRebalanceFeedback({ type: 'error', message });
     },
   });
 
@@ -148,6 +202,40 @@ export default function SchedulesPage() {
     createScheduleMutation.mutate({ tripId: selectedTripId, payload });
   };
 
+  const handleRebalanceSchedules = () => {
+    setRebalanceFeedback(null);
+
+    if (!selectedTripId) {
+      setRebalanceFeedback({ type: 'error', message: '재배치할 여행을 먼저 선택해 주세요.' });
+      return;
+    }
+
+    if (!rebalanceDay) {
+      setRebalanceFeedback({ type: 'error', message: '재배치할 일차를 선택해 주세요.' });
+      return;
+    }
+
+    const targetGroup = grouped.find((group) => group.day === rebalanceDay);
+    if (!targetGroup || targetGroup.items.length === 0) {
+      setRebalanceFeedback({ type: 'error', message: '선택한 일차에 일정이 없습니다.' });
+      return;
+    }
+
+    const scheduleIds = targetGroup.items.map((schedule) => schedule.id);
+    const payload: ScheduleRebalanceRequest = {
+      day_number: rebalanceDay,
+      schedule_ids: scheduleIds,
+      travel_mode: rebalanceMode,
+    };
+
+    const trimmed = rebalanceStartTime.trim();
+    if (trimmed) {
+      payload.day_start_time = trimmed.length === 5 ? `${trimmed}:00` : trimmed;
+    }
+
+    rebalanceMutation.mutate({ tripId: selectedTripId, payload });
+  };
+
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
@@ -174,12 +262,66 @@ export default function SchedulesPage() {
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             </div>
-            <button className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700">
-              <Route className="h-4 w-4" />
-              이동 동선 최적화
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={rebalanceDay ?? ''}
+                onChange={(event) => setRebalanceDay(Number(event.target.value))}
+                className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 focus:border-primary-300 focus:outline-none"
+              >
+                {grouped.map((group) => (
+                  <option key={group.day} value={group.day}>
+                    DAY {group.day}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={rebalanceMode}
+                onChange={(event) => setRebalanceMode(event.target.value as TravelMode)}
+                className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 focus:border-primary-300 focus:outline-none"
+              >
+                {(['DRIVE', 'WALK', 'BICYCLE', 'TRANSIT'] as TravelMode[]).map((mode) => (
+                  <option key={mode} value={mode}>
+                    {mode}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="time"
+                value={rebalanceStartTime}
+                onChange={(event) => setRebalanceStartTime(event.target.value)}
+                className="w-28 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 focus:border-primary-300 focus:outline-none"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleRebalanceSchedules}
+              disabled={rebalanceMutation.isPending || grouped.length === 0}
+              className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {rebalanceMutation.isPending ? (
+                <>
+                  <RefreshCcw className="h-4 w-4 animate-spin" />
+                  재배치 중...
+                </>
+              ) : (
+                <>
+                  <Route className="h-4 w-4" />
+                  이동 동선 최적화
+                </>
+              )}
             </button>
           </div>
         </div>
+
+        {rebalanceFeedback && (
+          <p
+            className={`mt-3 text-xs font-semibold ${
+              rebalanceFeedback.type === 'success' ? 'text-emerald-600' : 'text-rose-600'
+            }`}
+          >
+            {rebalanceFeedback.message}
+          </p>
+        )}
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <ScheduleSummaryCard
