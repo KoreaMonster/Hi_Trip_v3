@@ -110,6 +110,27 @@ export type Traveler = {
   gender: 'M' | 'F';
 };
 
+export type TravelerDetail = Traveler & {
+  full_name_en: string;
+  gender_display: string;
+  address: string;
+  country: string;
+  is_companion: boolean;
+  companion_names: string;
+  proxy_booking: boolean;
+  passport_number: string | null;
+  passport_expiry: string | null;
+  passport_verified: boolean;
+  identity_verified: boolean;
+  booking_verified: boolean;
+  insurance_subscribed: boolean;
+  total_amount: number;
+  paid_amount: number;
+  payment_status: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 export type TripParticipant = {
   id: number;
   trip: number;
@@ -184,6 +205,25 @@ export type Place = {
   activity_time_display?: string | null;
   has_image?: boolean;
   alternative_place_info?: PlaceAlternativeInfo | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CoordinatorRole = {
+  id: number;
+  name: string;
+  description: string | null;
+  created_at: string;
+};
+
+export type PlaceCoordinator = {
+  id: number;
+  place: number;
+  role: CoordinatorRole | null;
+  role_id?: number;
+  name: string;
+  phone: string;
+  note: string | null;
   created_at: string;
   updated_at: string;
 };

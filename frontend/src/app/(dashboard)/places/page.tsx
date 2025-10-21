@@ -1,7 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { Clock4, Compass, Filter, Locate, MapPin, Navigation, Search, Sparkles, Stars } from 'lucide-react';
+import { ArrowUpRight, Clock4, Compass, Filter, Locate, MapPin, Navigation, Search, Sparkles, Stars } from 'lucide-react';
 import { useCategoriesQuery, usePlacesQuery } from '@/lib/queryHooks';
 import type { Place, PlaceAlternativeInfo } from '@/types/api';
 
@@ -204,10 +205,18 @@ export default function PlacesPage() {
 
 function PlaceCard({ place, isActive, onSelect }: { place: Place; isActive: boolean; onSelect: () => void }) {
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
+      aria-pressed={isActive}
       onClick={onSelect}
-      className={`group overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition hover:-translate-y-1 hover:shadow-lg ${
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
+      className={`group cursor-pointer overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition hover:-translate-y-1 hover:shadow-lg ${
         isActive ? 'border-primary-300 ring-2 ring-primary-200 ring-offset-2' : 'border-slate-200'
       }`}
     >
@@ -241,8 +250,20 @@ function PlaceCard({ place, isActive, onSelect }: { place: Place; isActive: bool
           </p>
         )}
         <p className="text-xs font-semibold text-primary-600">{place.ai_meeting_point ?? '집결지 미정'}</p>
+        <div className="flex items-center justify-between text-xs">
+          <span className="rounded-full bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-500">
+            업데이트 {new Date(place.updated_at).toLocaleDateString('ko-KR')}
+          </span>
+          <Link
+            href={`/places/${place.id}`}
+            onClick={(event) => event.stopPropagation()}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-primary-600 hover:text-primary-700"
+          >
+            상세 보기 <ArrowUpRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -266,9 +287,17 @@ function PlaceDetailsPanel({ place }: { place: Place | null }) {
             <h2 className="text-lg font-semibold text-slate-900">일정 장소 정보</h2>
             <p className="text-xs text-slate-500">담당자와 공유할 기본 정보를 확인하세요.</p>
           </div>
-          <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
-            <Compass className="h-3.5 w-3.5" /> {place.category?.name ?? '미분류'}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
+              <Compass className="h-3.5 w-3.5" /> {place.category?.name ?? '미분류'}
+            </span>
+            <Link
+              href={`/places/${place.id}`}
+              className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-primary-200 hover:text-primary-600"
+            >
+              상세 페이지 <ArrowUpRight className="h-3 w-3" />
+            </Link>
+          </div>
         </header>
 
         <div className="grid gap-3 px-5 py-4 text-sm">

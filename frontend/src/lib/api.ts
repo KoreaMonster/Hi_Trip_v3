@@ -6,6 +6,7 @@ import type {
   MonitoringAlert,
   ParticipantLatest,
   Place,
+  PlaceCoordinator,
   PlaceCategory,
   ProfileResponse,
   Schedule,
@@ -14,6 +15,7 @@ import type {
   TripCreate,
   TripDetail,
   TripParticipant,
+  TravelerDetail,
   UserDetail,
 } from '@/types/api';
 
@@ -109,8 +111,18 @@ export const listParticipants = async (tripId: number): Promise<TripParticipant[
 export const listPlaces = async (): Promise<Place[]> =>
   apiRequest(() => apiClient.get('api/places/').json<Place[]>());
 
+export const getPlaceDetail = async (placeId: number | string): Promise<Place> =>
+  apiRequest(() => apiClient.get(`api/places/${placeId}/`).json<Place>());
+
 export const listCategories = async (): Promise<PlaceCategory[]> =>
   apiRequest(() => apiClient.get('api/categories/').json<PlaceCategory[]>());
+
+export const listPlaceCoordinators = async (
+  placeId: number | string,
+): Promise<PlaceCoordinator[]> =>
+  apiRequest(() =>
+    apiClient.get(`api/places/${placeId}/coordinators/`).json<PlaceCoordinator[]>(),
+  );
 
 export const listPendingStaff = async (): Promise<UserDetail[]> =>
   apiRequest(async () => {
@@ -168,3 +180,8 @@ export const getTripDetail = async (tripId: number): Promise<TripDetail> =>
     const trip = await apiClient.get(`api/trips/${tripId}/`).json<TripDetail>();
     return normalizeTripDetail(trip);
   });
+
+export const getTravelerDetail = async (
+  travelerId: number | string,
+): Promise<TravelerDetail> =>
+  apiRequest(() => apiClient.get(`api/travelers/${travelerId}/`).json<TravelerDetail>());

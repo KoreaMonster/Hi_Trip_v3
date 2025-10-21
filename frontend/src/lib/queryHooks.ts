@@ -7,8 +7,11 @@ import {
   getMonitoringTripLatest,
   getProfile,
   getTripDetail,
+  getTravelerDetail,
   listCategories,
   listParticipants,
+  listPlaceCoordinators,
+  getPlaceDetail,
   listPendingStaff,
   listPlaces,
   listSchedules,
@@ -20,12 +23,14 @@ import type {
   MonitoringAlert,
   ParticipantLatest,
   Place,
+  PlaceCoordinator,
   PlaceCategory,
   ProfileResponse,
   Schedule,
   Trip,
   TripDetail,
   TripParticipant,
+  TravelerDetail,
   UserDetail,
 } from '@/types/api';
 
@@ -109,10 +114,31 @@ export const usePlacesQuery = (options?: BaseOptions<Place[]>) =>
     ...options,
   });
 
+export const usePlaceDetailQuery = (placeId?: number, options?: BaseOptions<Place>) =>
+  useQuery({
+    queryKey: ['places', placeId, 'detail'],
+    queryFn: () => getPlaceDetail(placeId!),
+    enabled: typeof placeId === 'number',
+    staleTime: 1000 * 60 * 10,
+    ...options,
+  });
+
 export const useCategoriesQuery = (options?: BaseOptions<PlaceCategory[]>) =>
   useQuery({
     queryKey: ['place-categories'],
     queryFn: listCategories,
+    staleTime: 1000 * 60 * 10,
+    ...options,
+  });
+
+export const usePlaceCoordinatorsQuery = (
+  placeId?: number,
+  options?: BaseOptions<PlaceCoordinator[]>,
+) =>
+  useQuery({
+    queryKey: ['places', placeId, 'coordinators'],
+    queryFn: () => listPlaceCoordinators(placeId!),
+    enabled: typeof placeId === 'number',
     staleTime: 1000 * 60 * 10,
     ...options,
   });
@@ -142,5 +168,17 @@ export const useProfileQuery = (options?: BaseOptions<ProfileResponse>) =>
     queryFn: getProfile,
     staleTime: 1000 * 30,
     retry: false,
+    ...options,
+  });
+
+export const useTravelerDetailQuery = (
+  travelerId?: number,
+  options?: BaseOptions<TravelerDetail>,
+) =>
+  useQuery({
+    queryKey: ['travelers', travelerId],
+    queryFn: () => getTravelerDetail(travelerId!),
+    enabled: typeof travelerId === 'number',
+    staleTime: 1000 * 60 * 5,
     ...options,
   });

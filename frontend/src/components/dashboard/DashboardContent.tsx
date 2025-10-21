@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo } from 'react';
 import {
   useHealthQuery,
@@ -380,7 +381,12 @@ export default function DashboardContent() {
               {recommendedPlaces.map((place) => (
                 <div key={place.id} className="rounded-2xl border border-slate-100 bg-[#E8F1FF] p-4 shadow-inner">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-slate-900">{place.name}</p>
+                    <Link
+                      href={`/places/${place.id}`}
+                      className="text-sm font-semibold text-primary-600 hover:underline"
+                    >
+                      {place.name}
+                    </Link>
                     <span className="rounded-full bg-white/80 px-3 py-1 text-[11px] font-semibold text-primary-600">
                       {place.category?.name ?? '미분류'}
                     </span>

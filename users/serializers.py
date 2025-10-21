@@ -104,15 +104,55 @@ class TravelerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Traveler
         fields = [
-            'id',
-            'last_name_kr',
-            'first_name_kr',
-            'full_name_kr',
-            'first_name_en',
-            'last_name_en',
-            'phone',
-            'email',
-            'birth_date',
-            'gender'
+            "id",
+            "last_name_kr",
+            "first_name_kr",
+            "full_name_kr",
+            "first_name_en",
+            "last_name_en",
+            "phone",
+            "email",
+            "birth_date",
+            "gender",
         ]
-        read_only_fields = ['id', 'full_name_kr']
+        read_only_fields = ["id", "full_name_kr"]
+
+
+class TravelerDetailSerializer(serializers.ModelSerializer):
+    """고객 상세 페이지에서 사용하는 여행자 전체 정보 직렬화기."""
+
+    gender_display = serializers.CharField(source="get_gender_display", read_only=True)
+
+    class Meta:
+        model = Traveler
+        fields = [
+            "id",
+            "last_name_kr",
+            "first_name_kr",
+            "full_name_kr",
+            "first_name_en",
+            "last_name_en",
+            "full_name_en",
+            "phone",
+            "email",
+            "birth_date",
+            "gender",
+            "gender_display",
+            "address",
+            "country",
+            "is_companion",
+            "companion_names",
+            "proxy_booking",
+            "passport_number",
+            "passport_expiry",
+            "passport_verified",
+            "identity_verified",
+            "booking_verified",
+            "insurance_subscribed",
+            "total_amount",
+            "paid_amount",
+            "payment_status",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
