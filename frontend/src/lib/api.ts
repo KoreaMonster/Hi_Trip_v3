@@ -42,12 +42,18 @@ const deriveTripStatus = (
   startDate?: string,
   endDate?: string,
 ): Trip['status'] => {
-  const fallback = toTripStatus(status);
+  const sanitized = toTripStatus(status);
+
+  // 백엔드에서 명시적으로 설정한 진행 상태는 그대로 신뢰한다.
+  if (sanitized === 'ongoing' || sanitized === 'completed') {
+    return sanitized;
+  }
+
   const start = parseDateOnly(startDate);
   const end = parseDateOnly(endDate);
 
   if (!start || !end) {
-    return fallback;
+    return sanitized;
   }
 
   const today = dateOnly(new Date());

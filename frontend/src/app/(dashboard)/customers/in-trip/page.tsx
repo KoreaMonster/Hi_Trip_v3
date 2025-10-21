@@ -135,6 +135,7 @@ export default function InTripCustomersPage() {
       queryClient.invalidateQueries({ queryKey: ['monitoring', 'latest', tripId] });
       queryClient.invalidateQueries({ queryKey: ['monitoring', 'history', tripId], exact: false });
       queryClient.invalidateQueries({ queryKey: ['monitoring', 'alerts', tripId] });
+      void refetchLatest();
     },
   });
 
