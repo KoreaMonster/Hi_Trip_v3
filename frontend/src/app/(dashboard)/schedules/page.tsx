@@ -181,8 +181,9 @@ export default function SchedulesPage() {
   }, [activeTab, grouped]);
 
   useEffect(() => {
-    setLocalScheduleIds(activeDaySchedules.map((schedule) => schedule.id));
-    setHasLocalReorder(false);
+    const nextIds = activeDaySchedules.map((schedule) => schedule.id);
+    setLocalScheduleIds((prev) => (arraysEqual(prev, nextIds) ? prev : nextIds));
+    setHasLocalReorder((prev) => (prev ? false : prev));
   }, [activeDaySchedules]);
 
   const activeScheduleMap = useMemo(() => {
