@@ -1,5 +1,6 @@
 """Schedules 앱에서 사용할 Serializer 정의."""
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Max
 from rest_framework import serializers
 from typing import Any, Optional
 
@@ -92,6 +93,9 @@ class ScheduleSerializer(serializers.ModelSerializer):
             'updated_at',
             'trip',
         ]
+        extra_kwargs = {
+            'order': {'required': False},
+        }
 
     def get_duration_display(self, obj: Schedule) -> str:
         """
@@ -207,6 +211,13 @@ class ScheduleSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         """새로운 Schedule 인스턴스를 생성할 때 모델 검증을 함께 실행합니다."""
 
+        trip = self.context.get("trip") or validated_data.get("trip")
+        day_number = validated_data.get("day_number")
+        order = validated_data.get("order")
+
+        if trip and day_number is not None and (order is None or order <= 0):
+            validated_data["order"] = self._resolve_default_order(trip, day_number)
+
         schedule = Schedule(**validated_data)
         self._run_model_validation(schedule)
         schedule.save()
@@ -220,6 +231,16 @@ class ScheduleSerializer(serializers.ModelSerializer):
         self._run_model_validation(instance)
         instance.save()
         return instance
+
+    def _resolve_default_order(self, trip, day_number: int) -> int:
+        """같은 일차에서 가장 큰 순서를 찾아 +1 값을 반환합니다."""
+
+        max_order = (
+            Schedule.objects.filter(trip=trip, day_number=day_number).aggregate(max_order=Max("order"))[
+                "max_order"
+            ]
+        )
+        return (max_order or 0) + 1
 
 
 class PlaceCategorySerializer(serializers.ModelSerializer):

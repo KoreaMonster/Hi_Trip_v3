@@ -5,6 +5,7 @@ import {
   getHealth,
   getMonitoringTripAlerts,
   getMonitoringTripLatest,
+  getMonitoringParticipantHistory,
   getProfile,
   getTripDetail,
   listCategories,
@@ -18,6 +19,7 @@ import {
 import type {
   HealthResponse,
   MonitoringAlert,
+  MonitoringParticipantHistory,
   ParticipantLatest,
   Place,
   PlaceCategory,
@@ -86,6 +88,19 @@ export const useMonitoringLatestQuery = (
     queryFn: () => getMonitoringTripLatest(tripId!),
     enabled: typeof tripId === 'number',
     refetchInterval: 1000 * 60,
+    ...options,
+  });
+
+export const useMonitoringParticipantHistoryQuery = (
+  tripId?: number,
+  participantId?: number,
+  options?: BaseOptions<MonitoringParticipantHistory>,
+) =>
+  useQuery({
+    queryKey: ['monitoring', 'history', tripId, participantId],
+    queryFn: () => getMonitoringParticipantHistory(tripId!, participantId!),
+    enabled: typeof tripId === 'number' && typeof participantId === 'number',
+    staleTime: 1000 * 30,
     ...options,
   });
 
