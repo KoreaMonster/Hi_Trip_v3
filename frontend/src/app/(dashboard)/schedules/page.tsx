@@ -1,6 +1,7 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { DragEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CalendarClock,
@@ -12,10 +13,10 @@ import {
   Route,
   Search,
 } from 'lucide-react';
-import { createSchedule } from '@/lib/api';
+import { createSchedule, rebalanceTripDay } from '@/lib/api';
 import { usePlacesQuery, useSchedulesQuery } from '@/lib/queryHooks';
 import { useScopedTrips } from '@/lib/useScopedTrips';
-import type { Schedule, ScheduleCreate, Trip } from '@/types/api';
+import type { Schedule, ScheduleCreate, ScheduleRebalanceRequest, Trip } from '@/types/api';
 
 const minutesToLabel = (minutes?: number | null) => {
   if (!minutes) return '소요 시간 정보 없음';
@@ -26,6 +27,21 @@ const minutesToLabel = (minutes?: number | null) => {
   return `${hours}시간 ${mins}분`;
 };
 
+const timeToMinutes = (value: string) => {
+  const [hours = '0', minutes = '0'] = value.split(':');
+  const parsedHours = Number(hours);
+  const parsedMinutes = Number(minutes);
+  if (Number.isNaN(parsedHours) || Number.isNaN(parsedMinutes)) {
+    return 0;
+  }
+  return parsedHours * 60 + parsedMinutes;
+};
+
+const arraysEqual = (a: number[], b: number[]) =>
+  a.length === b.length && a.every((value, index) => value === b[index]);
+
+const DEFAULT_TRAVEL_MODE: ScheduleRebalanceRequest['travel_mode'] = 'DRIVE';
+
 const initialScheduleForm = {
   day_number: 1,
   start_time: '09:00',
@@ -35,7 +51,6 @@ const initialScheduleForm = {
   transport: '',
   budget: '',
   place_id: '',
-  order: '',
 };
 
 type ScheduleFormState = typeof initialScheduleForm;
@@ -54,6 +69,12 @@ export default function SchedulesPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [timelineError, setTimelineError] = useState<string | null>(null);
+  const [timelineNotice, setTimelineNotice] = useState<string | null>(null);
+  const [localScheduleIds, setLocalScheduleIds] = useState<number[]>([]);
+  const [draggingId, setDraggingId] = useState<number | null>(null);
+  const [hasLocalReorder, setHasLocalReorder] = useState(false);
+  const activeScheduleSignatureRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (trips.length === 0) {
@@ -71,6 +92,11 @@ export default function SchedulesPage() {
   useEffect(() => {
     setActiveTab('details');
   }, [selectedTripId]);
+
+  useEffect(() => {
+    setTimelineError(null);
+    setTimelineNotice(null);
+  }, [activeTab]);
 
   const currentTrip = useMemo<Trip | null>(
     () => trips.find((trip) => trip.id === selectedTripId) ?? null,
@@ -155,19 +181,200 @@ export default function SchedulesPage() {
     return grouped.find((item) => item.day === activeTab)?.items ?? [];
   }, [activeTab, grouped]);
 
+  useEffect(() => {
+    const nextIds = activeDaySchedules.map((schedule) => schedule.id);
+    const signature = nextIds.join(',');
+
+    if (activeScheduleSignatureRef.current === signature) {
+      return;
+    }
+
+    activeScheduleSignatureRef.current = signature;
+    setLocalScheduleIds(nextIds);
+    setHasLocalReorder(false);
+  }, [activeDaySchedules]);
+
+  const activeScheduleMap = useMemo(() => {
+    const map = new Map<number, Schedule>();
+    activeDaySchedules.forEach((schedule) => {
+      map.set(schedule.id, schedule);
+    });
+    return map;
+  }, [activeDaySchedules]);
+
+  const orderedActiveSchedules = useMemo(() => {
+    if (localScheduleIds.length === activeDaySchedules.length && activeDaySchedules.length > 0) {
+      const ordered = localScheduleIds
+        .map((id) => activeScheduleMap.get(id))
+        .filter((value): value is Schedule => Boolean(value));
+      if (ordered.length === activeDaySchedules.length) {
+        return ordered;
+      }
+    }
+    return activeDaySchedules;
+  }, [localScheduleIds, activeScheduleMap, activeDaySchedules]);
+
   const activeDayDuration = useMemo(() => {
     if (typeof activeTab !== 'number') return 0;
-    return activeDaySchedules.reduce((acc, schedule) => acc + (schedule.duration_minutes ?? 0), 0);
-  }, [activeDaySchedules, activeTab]);
+    return orderedActiveSchedules.reduce((acc, schedule) => acc + (schedule.duration_minutes ?? 0), 0);
+  }, [orderedActiveSchedules, activeTab]);
+
+  const rebalanceMutation = useMutation({
+    mutationFn: ({
+      tripId,
+      payload,
+    }: {
+      tripId: number;
+      payload: ScheduleRebalanceRequest;
+    }) => rebalanceTripDay(tripId, payload),
+    onSuccess: (data, variables) => {
+      queryClient.setQueryData<Schedule[]>(
+        ['trips', variables.tripId, 'schedules'],
+        (prev = []) => {
+          const others = prev.filter((schedule) => schedule.day_number !== data.day_number);
+          return [...others, ...data.schedules];
+        },
+      );
+    },
+  });
+
+  const commitReorder = useCallback(
+    async (scheduleIds: number[], fallbackIds?: number[], successMessage?: string) => {
+      if (!selectedTripId || typeof activeTab !== 'number' || scheduleIds.length === 0) {
+        setDraggingId(null);
+        setHasLocalReorder(false);
+        return;
+      }
+
+      const baseline = fallbackIds ?? localScheduleIds;
+      if (arraysEqual(scheduleIds, baseline)) {
+        setDraggingId(null);
+        setHasLocalReorder(false);
+        return;
+      }
+
+      try {
+        setTimelineError(null);
+        setTimelineNotice(null);
+        const response = await rebalanceMutation.mutateAsync({
+          tripId: selectedTripId,
+          payload: {
+            day_number: activeTab,
+            schedule_ids: scheduleIds,
+            travel_mode: DEFAULT_TRAVEL_MODE,
+          },
+        });
+        setTimelineNotice(successMessage ?? '타임라인이 자동으로 정리되었습니다.');
+        setLocalScheduleIds(response.schedules.map((schedule) => schedule.id));
+        setHasLocalReorder(false);
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : '타임라인 재배치 중 오류가 발생했습니다.';
+        setTimelineError(message);
+        if (fallbackIds) {
+          setLocalScheduleIds(fallbackIds);
+        }
+      } finally {
+        setDraggingId(null);
+      }
+    },
+    [selectedTripId, activeTab, rebalanceMutation, localScheduleIds],
+  );
+
+  const handleDragStart = useCallback(
+    (scheduleId: number) => (event: DragEvent<HTMLTableRowElement>) => {
+      if (!canEditSchedule || rebalanceMutation.isPending) return;
+      setDraggingId(scheduleId);
+      setHasLocalReorder(false);
+      setTimelineNotice(null);
+      setTimelineError(null);
+      event.dataTransfer.effectAllowed = 'move';
+      try {
+        event.dataTransfer.setData('text/plain', String(scheduleId));
+      } catch {
+        // 일부 브라우저는 setData를 필수로 요구하지 않으므로 무시합니다.
+      }
+    },
+    [canEditSchedule, rebalanceMutation.isPending],
+  );
+
+  const handleDragOver = useCallback(
+    (scheduleId: number) => (event: DragEvent<HTMLTableRowElement>) => {
+      if (
+        !canEditSchedule ||
+        rebalanceMutation.isPending ||
+        draggingId === null ||
+        draggingId === scheduleId
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      setLocalScheduleIds((prev) => {
+        const draggingIndex = prev.indexOf(draggingId);
+        const targetIndex = prev.indexOf(scheduleId);
+        if (draggingIndex === -1 || targetIndex === -1 || draggingIndex === targetIndex) {
+          return prev;
+        }
+        const next = [...prev];
+        next.splice(draggingIndex, 1);
+        next.splice(targetIndex, 0, draggingId);
+        return next;
+      });
+      setHasLocalReorder(true);
+    },
+    [canEditSchedule, rebalanceMutation.isPending, draggingId],
+  );
+
+  const handleDragEnd = useCallback(() => {
+    if (!canEditSchedule) return;
+    if (hasLocalReorder) {
+      const fallbackIds = activeDaySchedules.map((schedule) => schedule.id);
+      void commitReorder(
+        localScheduleIds,
+        fallbackIds,
+        '일정 순서를 재배치했습니다.',
+      );
+    } else {
+      setDraggingId(null);
+    }
+  }, [canEditSchedule, hasLocalReorder, activeDaySchedules, commitReorder, localScheduleIds]);
 
   const createScheduleMutation = useMutation({
     mutationFn: ({ tripId, payload }: { tripId: number; payload: ScheduleCreate }) =>
       createSchedule(tripId, payload),
-    onSuccess: async (_created, variables) => {
+    onSuccess: async (created, variables) => {
       setForm((prev) => ({ ...initialScheduleForm, day_number: prev.day_number }));
       setFormSuccess('새 일정이 추가되었습니다.');
       setFormError(null);
-      await queryClient.invalidateQueries({ queryKey: ['trips', variables.tripId, 'schedules'] });
+      setTimelineError(null);
+
+      const scheduleQueryKey = ['trips', variables.tripId, 'schedules'] as const;
+      queryClient.setQueryData<Schedule[]>(scheduleQueryKey, (prev = []) => {
+        const others = prev.filter((item) => item.id !== created.id);
+        return [...others, created];
+      });
+
+      const updated = queryClient.getQueryData<Schedule[]>(scheduleQueryKey) ?? [];
+      const daySchedules = updated.filter((schedule) => schedule.day_number === created.day_number);
+      const fallbackIds = daySchedules.map((schedule) => schedule.id);
+      const sortedIds = [...daySchedules]
+        .sort((a, b) => {
+          const diff = a.start_time.localeCompare(b.start_time);
+          if (diff !== 0) return diff;
+          return a.id - b.id;
+        })
+        .map((schedule) => schedule.id);
+
+      if (sortedIds.length > 0 && !arraysEqual(sortedIds, fallbackIds)) {
+        await commitReorder(sortedIds, fallbackIds, '새 일정 시작 시간 기준으로 순서를 정리했습니다.');
+      } else {
+        setTimelineNotice('새 일정을 추가했습니다.');
+      }
+
+      await queryClient.invalidateQueries({ queryKey: scheduleQueryKey });
     },
     onError: (error) => {
       const message =
@@ -234,14 +441,20 @@ export default function SchedulesPage() {
       return Math.max(order, candidate);
     }, 0);
 
-    let manualOrder: number | null = null;
-    if (form.order.trim()) {
-      const parsedOrder = Number(form.order);
-      if (Number.isNaN(parsedOrder) || parsedOrder < 1) {
-        setFormError('순서는 1 이상의 숫자로 입력해 주세요.');
+    const newStartMinutes = timeToMinutes(normalizedStart);
+    const newEndMinutes = timeToMinutes(normalizedEnd);
+
+    const hasOverlap = sameDaySchedules.some((schedule) => {
+      const existingStart = timeToMinutes(schedule.start_time);
+      const existingEnd = timeToMinutes(schedule.end_time);
+      return newStartMinutes < existingEnd && newEndMinutes > existingStart;
+    });
+
+    if (hasOverlap) {
+      const proceed = window.confirm('시간이 겹치는데 생성하시겠습니까?');
+      if (!proceed) {
         return;
       }
-      manualOrder = Math.floor(parsedOrder);
     }
 
     const payload: ScheduleCreate = {
@@ -252,13 +465,14 @@ export default function SchedulesPage() {
       meeting_point: form.meeting_point.trim() || null,
       transport: form.transport.trim() || null,
       budget: form.budget ? Number(form.budget) : null,
-      order: manualOrder ?? nextOrder + 1,
+      order: nextOrder + 1,
     };
 
     if (placeId !== null) {
       payload.place_id = placeId;
     }
 
+    setTimelineNotice(null);
     setIsSubmitting(true);
     createScheduleMutation.mutate({ tripId: selectedTripId, payload });
   };
@@ -528,233 +742,256 @@ export default function SchedulesPage() {
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-slate-900">{activeTab}일차 타임라인</h3>
-                    <span className="rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-900">{activeTab}일차 타임라인</h3>
+                      {canEditSchedule && (
+                        <p className="text-xs text-slate-500">
+                          일정을 드래그하면 백엔드에서 자동으로 순서와 시간이 재배치됩니다.
+                        </p>
+                      )}
+                    </div>
+                    <span className="inline-flex items-center rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
                       총 소요 {minutesToLabel(activeDayDuration)}
                     </span>
                   </div>
-                  <div className="overflow-hidden rounded-2xl border border-slate-100">
-                    <table className="min-w-full divide-y divide-slate-100 text-sm">
-                      <thead className="bg-[#F7F9FC] text-slate-500">
-                        <tr>
-                          <th className="px-5 py-3 text-left font-semibold">시간</th>
-                          <th className="px-5 py-3 text-left font-semibold">일정 내용</th>
-                          <th className="px-5 py-3 text-left font-semibold">집결지</th>
-                          <th className="px-5 py-3 text-left font-semibold">이동 수단</th>
-                          <th className="px-5 py-3 text-right font-semibold">예산</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 bg-white">
-                        {activeDaySchedules.length === 0 && (
-                          <tr>
-                            <td colSpan={5} className="px-5 py-6 text-center text-sm text-slate-500">
-                              {canEditSchedule
-                                ? '아직 등록된 일정이 없습니다. 아래에서 일정을 추가해 보세요.'
-                                : '아직 등록된 일정이 없습니다. 담당자에게 등록을 요청해 주세요.'}
-                            </td>
-                          </tr>
-                        )}
-                        {activeDaySchedules.map((schedule) => (
-                          <tr key={schedule.id} className="transition hover:bg-slate-50/70">
-                            <td className="px-5 py-3 font-medium text-slate-700">
-                              {schedule.start_time.slice(0, 5)} ~ {schedule.end_time.slice(0, 5)}
-                            </td>
-                            <td className="px-5 py-3 text-slate-700">
-                              <div className="font-semibold text-slate-900">
-                                {schedule.main_content ?? schedule.place_name ?? '세부 일정 미정'}
-                              </div>
-                              <div className="text-xs text-slate-500">#{schedule.order.toString().padStart(2, '0')}</div>
-                            </td>
-                            <td className="px-5 py-3 text-slate-600">{schedule.meeting_point ?? '집결지 미정'}</td>
-                            <td className="px-5 py-3 text-slate-600">{schedule.transport ?? '미정'}</td>
-                            <td className="px-5 py-3 text-right text-slate-700">
-                              {schedule.budget ? `${schedule.budget.toLocaleString()}원` : '-'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {canEditSchedule ? (
-                    <div className="rounded-2xl border border-slate-100 bg-[#F9FBFF] p-5">
-                      <div className="mb-4 flex items-center justify-between">
-                        <div>
-                          <h4 className="text-base font-semibold text-slate-900">새 일정 추가</h4>
-                          <p className="text-sm text-slate-500">{activeTab}일차에 필요한 일정을 즉시 등록하세요.</p>
-                        </div>
-                        {formSuccess && (
-                          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">
-                            {formSuccess}
-                          </span>
-                        )}
-                      </div>
-
-                      {formError && (
-                        <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
-                          {formError}
+                  <div className="grid gap-6 xl:grid-cols-3">
+                    <div className="space-y-4 xl:col-span-2">
+                      {(timelineError || timelineNotice || rebalanceMutation.isPending) && (
+                        <div
+                          className={`rounded-xl border px-4 py-3 text-sm ${
+                            timelineError
+                              ? 'border-rose-200 bg-rose-50 text-rose-600'
+                              : 'border-primary-100 bg-primary-50 text-primary-700'
+                          }`}
+                        >
+                          {timelineError ?? (rebalanceMutation.isPending ? '타임라인을 재배치하는 중입니다...' : timelineNotice)}
                         </div>
                       )}
-
-                      <form className="grid gap-4" onSubmit={handleSubmitSchedule}>
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <div className="space-y-2">
-                          <label htmlFor="schedule-start" className="text-sm font-semibold text-slate-700">
-                            시작 시간
-                          </label>
-                          <input
-                            id="schedule-start"
-                            type="time"
-                            value={form.start_time}
-                            onChange={(event) => handleFormChange('start_time')(event.target.value)}
-                            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
-                            required
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label htmlFor="schedule-end" className="text-sm font-semibold text-slate-700">
-                            종료 시간
-                          </label>
-                          <input
-                            id="schedule-end"
-                            type="time"
-                            value={form.end_time}
-                            onChange={(event) => handleFormChange('end_time')(event.target.value)}
-                            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
-                            required
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label htmlFor="schedule-content" className="text-sm font-semibold text-slate-700">
-                          주요 활동
-                        </label>
-                        <input
-                          id="schedule-content"
-                          type="text"
-                          value={form.main_content}
-                          onChange={(event) => handleFormChange('main_content')(event.target.value)}
-                          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
-                          placeholder="예: 문화 체험 프로그램"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <label htmlFor="schedule-place" className="text-sm font-semibold text-slate-700">
-                          방문 장소
-                        </label>
-                        {placesLoading ? (
-                          <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-2 text-sm text-slate-500">
-                            방문 가능 장소를 불러오는 중입니다.
-                          </div>
-                        ) : places.length === 0 ? (
-                          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-600">
-                            등록된 장소가 없습니다. 장소 관리에서 먼저 추가해 주세요.
-                          </div>
-                        ) : (
-                          <select
-                            id="schedule-place"
-                            value={form.place_id}
-                            onChange={(event) => handleFormChange('place_id')(event.target.value)}
-                            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
-                          >
-                            <option value="">방문 장소 미정</option>
-                            {places.map((place) => (
-                              <option key={place.id} value={place.id}>
-                                {place.name}
-                              </option>
+                      <div className="overflow-hidden rounded-2xl border border-slate-100">
+                        <table className="min-w-full divide-y divide-slate-100 text-sm">
+                          <thead className="bg-[#F7F9FC] text-slate-500">
+                            <tr>
+                              <th className="px-5 py-3 text-left font-semibold">시간</th>
+                              <th className="px-5 py-3 text-left font-semibold">일정 내용</th>
+                              <th className="px-5 py-3 text-left font-semibold">집결지</th>
+                              <th className="px-5 py-3 text-left font-semibold">이동 수단</th>
+                              <th className="px-5 py-3 text-right font-semibold">예산</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 bg-white">
+                            {orderedActiveSchedules.length === 0 && (
+                              <tr>
+                                <td colSpan={5} className="px-5 py-6 text-center text-sm text-slate-500">
+                                  {canEditSchedule
+                                    ? '아직 등록된 일정이 없습니다. 오른쪽에서 일정을 추가해 보세요.'
+                                    : '아직 등록된 일정이 없습니다. 담당자에게 등록을 요청해 주세요.'}
+                                </td>
+                              </tr>
+                            )}
+                            {orderedActiveSchedules.map((schedule, index) => (
+                              <tr
+                                key={schedule.id}
+                                draggable={canEditSchedule}
+                                onDragStart={handleDragStart(schedule.id)}
+                                onDragOver={handleDragOver(schedule.id)}
+                                onDragEnd={handleDragEnd}
+                                onDrop={(event) => event.preventDefault()}
+                                className={`transition ${
+                                  canEditSchedule ? 'cursor-move' : ''
+                                } ${
+                                  draggingId === schedule.id ? 'bg-primary-50/60' : 'hover:bg-slate-50/70'
+                                }`}
+                              >
+                                <td className="px-5 py-3 font-medium text-slate-700">
+                                  {schedule.start_time.slice(0, 5)} ~ {schedule.end_time.slice(0, 5)}
+                                </td>
+                                <td className="px-5 py-3 text-slate-700">
+                                  <div className="font-semibold text-slate-900">
+                                    {schedule.main_content ?? schedule.place_name ?? '세부 일정 미정'}
+                                  </div>
+                                  <div className="text-xs text-slate-500">#{String(index + 1).padStart(2, '0')}</div>
+                                </td>
+                                <td className="px-5 py-3 text-slate-600">{schedule.meeting_point ?? '집결지 미정'}</td>
+                                <td className="px-5 py-3 text-slate-600">{schedule.transport ?? '미정'}</td>
+                                <td className="px-5 py-3 text-right text-slate-700">
+                                  {schedule.budget ? `${schedule.budget.toLocaleString()}원` : '-'}
+                                </td>
+                              </tr>
                             ))}
-                          </select>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {canEditSchedule ? (
+                      <div className="rounded-2xl border border-slate-100 bg-[#F9FBFF] p-5">
+                        <div className="mb-4 flex items-center justify-between">
+                          <div>
+                            <h4 className="text-base font-semibold text-slate-900">새 일정 추가</h4>
+                            <p className="text-sm text-slate-500">{activeTab}일차에 필요한 일정을 즉시 등록하세요.</p>
+                          </div>
+                          {formSuccess && (
+                            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">
+                              {formSuccess}
+                            </span>
+                          )}
+                        </div>
+
+                        {formError && (
+                          <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
+                            {formError}
+                          </div>
                         )}
-                      </div>
 
-                      <div className="space-y-2">
-                        <label htmlFor="schedule-meeting" className="text-sm font-semibold text-slate-700">
-                          집결지
-                        </label>
-                        <input
-                          id="schedule-meeting"
-                          type="text"
-                          value={form.meeting_point}
-                          onChange={(event) => handleFormChange('meeting_point')(event.target.value)}
-                          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
-                          placeholder="예: 호텔 로비"
-                        />
-                      </div>
+                        <form className="grid gap-4" onSubmit={handleSubmitSchedule}>
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <div className="space-y-2">
+                              <label htmlFor="schedule-start" className="text-sm font-semibold text-slate-700">
+                                시작 시간
+                              </label>
+                              <input
+                                id="schedule-start"
+                                type="time"
+                                value={form.start_time}
+                                onChange={(event) => handleFormChange('start_time')(event.target.value)}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                                required
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label htmlFor="schedule-end" className="text-sm font-semibold text-slate-700">
+                                종료 시간
+                              </label>
+                              <input
+                                id="schedule-end"
+                                type="time"
+                                value={form.end_time}
+                                onChange={(event) => handleFormChange('end_time')(event.target.value)}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                                required
+                              />
+                            </div>
+                          </div>
 
-                      <div className="grid gap-4 md:grid-cols-3">
-                        <div className="space-y-2">
-                          <label htmlFor="schedule-transport" className="text-sm font-semibold text-slate-700">
-                            이동 수단
-                          </label>
-                          <input
-                            id="schedule-transport"
-                            type="text"
-                            value={form.transport}
-                            onChange={(event) => handleFormChange('transport')(event.target.value)}
-                            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
-                            placeholder="예: 전용 버스"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label htmlFor="schedule-budget" className="text-sm font-semibold text-slate-700">
-                            예산 (원)
-                          </label>
-                          <input
-                            id="schedule-budget"
-                            type="number"
-                            min={0}
-                            value={form.budget}
-                            onChange={(event) => handleFormChange('budget')(event.target.value)}
-                          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
-                          placeholder="예: 50000"
-                        />
-                      </div>
-                        <div className="space-y-2">
-                          <label htmlFor="schedule-order" className="text-sm font-semibold text-slate-700">
-                            순서 (선택)
-                          </label>
-                          <input
-                            id="schedule-order"
-                            type="number"
-                            min={1}
-                            value={form.order}
-                            onChange={(event) => handleFormChange('order')(event.target.value)}
-                            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
-                            placeholder="자동 배정"
-                          />
-                        </div>
-                      </div>
+                          <div className="space-y-2">
+                            <label htmlFor="schedule-content" className="text-sm font-semibold text-slate-700">
+                              주요 활동
+                            </label>
+                            <input
+                              id="schedule-content"
+                              type="text"
+                              value={form.main_content}
+                              onChange={(event) => handleFormChange('main_content')(event.target.value)}
+                              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                              placeholder="예: 문화 체험 프로그램"
+                            />
+                          </div>
 
-                      <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setForm({ ...initialScheduleForm, day_number: typeof activeTab === 'number' ? activeTab : 1 });
-                            setFormError(null);
-                            setFormSuccess(null);
-                          }}
-                          className="rounded-full border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600"
-                        >
-                          초기화
-                        </button>
-                        <button
-                          type="submit"
-                          disabled={isSubmitting}
-                          className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isSubmitting ? '등록 중...' : '일정 등록'}
-                        </button>
+                          <div className="space-y-2">
+                            <label htmlFor="schedule-place" className="text-sm font-semibold text-slate-700">
+                              방문 장소
+                            </label>
+                            {placesLoading ? (
+                              <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-2 text-sm text-slate-500">
+                                방문 가능 장소를 불러오는 중입니다.
+                              </div>
+                            ) : places.length === 0 ? (
+                              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-600">
+                                등록된 장소가 없습니다. 장소 관리에서 먼저 추가해 주세요.
+                              </div>
+                            ) : (
+                              <select
+                                id="schedule-place"
+                                value={form.place_id}
+                                onChange={(event) => handleFormChange('place_id')(event.target.value)}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                              >
+                                <option value="">방문 장소 미정</option>
+                                {places.map((place) => (
+                                  <option key={place.id} value={place.id}>
+                                    {place.name}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
+
+                          <div className="space-y-2">
+                            <label htmlFor="schedule-meeting" className="text-sm font-semibold text-slate-700">
+                              집결지
+                            </label>
+                            <input
+                              id="schedule-meeting"
+                              type="text"
+                              value={form.meeting_point}
+                              onChange={(event) => handleFormChange('meeting_point')(event.target.value)}
+                              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                              placeholder="예: 호텔 로비"
+                            />
+                          </div>
+
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <div className="space-y-2">
+                              <label htmlFor="schedule-transport" className="text-sm font-semibold text-slate-700">
+                                이동 수단
+                              </label>
+                              <input
+                                id="schedule-transport"
+                                type="text"
+                                value={form.transport}
+                                onChange={(event) => handleFormChange('transport')(event.target.value)}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                                placeholder="예: 전용 버스"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label htmlFor="schedule-budget" className="text-sm font-semibold text-slate-700">
+                                예산 (원)
+                              </label>
+                              <input
+                                id="schedule-budget"
+                                type="number"
+                                min={0}
+                                value={form.budget}
+                                onChange={(event) => handleFormChange('budget')(event.target.value)}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                                placeholder="예: 50000"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setForm({
+                                  ...initialScheduleForm,
+                                  day_number: typeof activeTab === 'number' ? activeTab : 1,
+                                });
+                                setFormError(null);
+                                setFormSuccess(null);
+                              }}
+                              className="rounded-full border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600"
+                            >
+                              초기화
+                            </button>
+                            <button
+                              type="submit"
+                              disabled={isSubmitting}
+                              className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {isSubmitting ? '등록 중...' : '일정 등록'}
+                            </button>
+                          </div>
+                        </form>
                       </div>
-                      </form>
-                    </div>
-                  ) : (
-                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-8 text-center text-sm text-slate-500">
-                      총괄관리자는 일정 등록 권한이 없습니다. 담당자 화면에서 여행 일정을 관리합니다.
-                    </div>
-                  )}
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-8 text-center text-sm text-slate-500">
+                        총괄관리자는 일정 등록 권한이 없습니다. 담당자 화면에서 여행 일정을 관리합니다.
+                      </div>
+                    )}
+                  </div>
                 </>
               )}
             </div>
