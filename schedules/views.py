@@ -5,6 +5,8 @@
 각 클래스/메서드에 한국어 주석을 충분히 추가해 초보 개발자도 흐름을 따라올 수 있도록 배려합니다.
 """
 import logging
+import math
+from collections.abc import Mapping
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 
@@ -730,6 +732,7 @@ class PlaceRecommendationViewSet(viewsets.ViewSet):
             self._sync_place_metadata(candidate)
 
             delta_seconds = candidate_route.seconds - original_route.seconds
+            distance_text = self._format_distance(candidate_route.distance_meters)
             alternative_payloads.append(
                 {
                     "place": {
@@ -747,6 +750,8 @@ class PlaceRecommendationViewSet(viewsets.ViewSet):
                     "total_duration_text": candidate_route.duration_text,
                     "delta_seconds": delta_seconds,
                     "delta_text": self._format_delta(delta_seconds),
+                    "distance_meters": candidate_route.distance_meters,
+                    "distance_text": distance_text,
                 }
             )
 
@@ -763,6 +768,12 @@ class PlaceRecommendationViewSet(viewsets.ViewSet):
             "searched_category": primary_type,
             "generated_at": timezone.now().isoformat(),
         }
+
+        self._persist_top_alternative(
+            unavailable_place_id=unavailable_place.place_id,
+            alternatives=alternative_payloads,
+            travel_mode=params["travel_mode"],
+        )
 
         return Response(response_payload, status=status.HTTP_200_OK)
 
@@ -791,6 +802,10 @@ class PlaceRecommendationViewSet(viewsets.ViewSet):
                 {
                     "original_duration_seconds": route.seconds,
                     "original_duration_text": route.duration_text,
+                    "original_distance_meters": route.distance_meters,
+                    "original_distance_text": self._format_distance(
+                        route.distance_meters
+                    ),
                 }
             )
 
@@ -837,6 +852,105 @@ class PlaceRecommendationViewSet(viewsets.ViewSet):
             text = f"{minutes}분"
 
         return f"{sign}{text}"
+
+    @staticmethod
+    def _format_distance(distance_meters):
+        """Routes API에서 내려준 거리를 사람이 읽기 쉬운 문자열로 변환합니다."""
+
+        if distance_meters in (None, ""):
+            return None
+        try:
+            meters = float(distance_meters)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(meters) or meters <= 0:
+            return None
+        if meters < 1000:
+            return f"{int(round(meters))}m"
+        kilometers = meters / 1000
+        if kilometers >= 10:
+            return f"{kilometers:.0f}km"
+        return f"{kilometers:.1f}km"
+
+    @staticmethod
+    def _as_non_empty_str(value):
+        if not isinstance(value, str):
+            return None
+        text = value.strip()
+        return text or None
+
+    @staticmethod
+    def _minutes_from_seconds(value):
+        try:
+            seconds = float(value)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(seconds) or seconds <= 0:
+            return None
+        return max(1, int(round(seconds / 60.0)))
+
+    def _compose_reason(self, candidate):
+        provided = self._as_non_empty_str(candidate.get("reason"))
+        if provided:
+            return provided
+
+        parts = []
+        delta_text = self._as_non_empty_str(candidate.get("delta_text"))
+        total_duration = self._as_non_empty_str(
+            candidate.get("total_duration_text")
+        )
+        if delta_text:
+            parts.append(f"기존 경로 대비 {delta_text}")
+        if total_duration:
+            parts.append(f"총 소요 {total_duration}")
+        if parts:
+            return " · ".join(parts)
+        return None
+
+    def _persist_top_alternative(self, *, unavailable_place_id, alternatives, travel_mode):
+        if not unavailable_place_id or not alternatives:
+            return
+
+        place = Place.objects.filter(google_place_id=unavailable_place_id).first()
+        if place is None:
+            return
+
+        top_candidate = alternatives[0]
+        place_payload = (
+            top_candidate.get("place") if isinstance(top_candidate.get("place"), Mapping) else {}
+        )
+
+        data = {
+            "place_name": self._as_non_empty_str(place_payload.get("name"))
+            or self._as_non_empty_str(top_candidate.get("place_name")),
+            "place_id": self._as_non_empty_str(place_payload.get("place_id"))
+            or self._as_non_empty_str(top_candidate.get("place_id")),
+            "distance_text": self._as_non_empty_str(
+                top_candidate.get("distance_text")
+            ),
+            "distance_meters": top_candidate.get("distance_meters"),
+            "total_duration_text": self._as_non_empty_str(
+                top_candidate.get("total_duration_text")
+            ),
+            "total_duration_seconds": top_candidate.get("total_duration_seconds"),
+            "delta_text": self._as_non_empty_str(top_candidate.get("delta_text")),
+            "delta_seconds": top_candidate.get("delta_seconds"),
+            "eta_minutes": self._minutes_from_seconds(
+                top_candidate.get("total_duration_seconds")
+            ),
+            "travel_mode": travel_mode,
+        }
+
+        reason = self._compose_reason(top_candidate)
+        if reason:
+            data["reason"] = reason
+
+        normalized = {key: value for key, value in data.items() if value is not None}
+        if not normalized:
+            return
+
+        place.ai_alternative_place = normalized
+        place.save(update_fields=["ai_alternative_place", "updated_at"])
 
     def _sync_place_metadata(self, google_place: GooglePlace):
         """Places API 결과를 로컬 Place 모델에 기록하거나 갱신합니다."""
