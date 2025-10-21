@@ -31,6 +31,12 @@ class Trip(models.Model):
         default='planning',
         verbose_name='상태'
     )
+    max_participants = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name='최대 참가 인원',
+        help_text='신청 가능한 참가자 상한. 비워두면 제한이 없습니다.',
+    )
     # -------- Phase2: 모니터링 임계치 (MVP 버전) --------
     heart_rate_min = models.PositiveIntegerField(
         null=True,

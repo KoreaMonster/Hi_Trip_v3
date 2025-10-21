@@ -1,50 +1,264 @@
 // ─── Users ────────────────────────────────────────────────────────────────────
 export type LoginRequest = { username: string; password: string };
-export type LoginResponse = { access: string; refresh?: string };
 
-export type ProfileResponse = {
+export type UserDetail = {
   id: number;
   username: string;
   email: string;
-  role: string;
+  phone: string;
+  first_name: string;
+  last_name: string;
+  first_name_kr: string;
+  last_name_kr: string;
+  full_name_kr: string;
+  full_name_en: string;
+  role: 'super_admin' | 'manager';
+  role_display: string;
   is_approved: boolean;
 };
 
+export type LoginResponse = UserDetail;
+export type ProfileResponse = UserDetail;
+
 // ─── Monitoring ───────────────────────────────────────────────────────────────
-export type HealthResponse = { status: 'ok' | 'error'; message: string; service?: string };
+export type HealthResponse = {
+  status: string;
+  message: string;
+  service: string;
+};
+
+export type MonitoringAlert = {
+  id: number;
+  participant: number;
+  traveler_name: string;
+  trip_id: number;
+  alert_type: 'health' | 'location';
+  message: string;
+  snapshot_time: string;
+  created_at: string;
+};
+
+export type HealthSnapshot = {
+  id: number;
+  measured_at: string;
+  heart_rate: number;
+  spo2: string;
+  status: string;
+};
+
+export type LocationSnapshot = {
+  id: number;
+  measured_at: string;
+  latitude: string;
+  longitude: string;
+  accuracy_m: string | null;
+};
+
+export type ParticipantLatest = {
+  participant_id: number;
+  traveler_name: string;
+  trip_id: number;
+  health: HealthSnapshot | null;
+  location: LocationSnapshot | null;
+};
+
+export type MonitoringParticipantHistory = {
+  participant_id: number;
+  traveler_name: string;
+  trip_id: number;
+  health: HealthSnapshot[];
+  location: LocationSnapshot[];
+};
+
+export type MonitoringDemoRequest = {
+  minutes?: number;
+  interval?: number;
+};
+
+export type MonitoringDemoResponse = {
+  created_records: number;
+  minutes: number;
+  interval_seconds: number;
+};
 
 // ─── Trips ────────────────────────────────────────────────────────────────────
+export type TripStatus = 'planning' | 'ongoing' | 'completed';
+
 export type Trip = {
   id: number;
   title: string;
-  start_date?: string | null;
-  end_date?: string | null;
+  destination: string;
+  start_date: string;
+  end_date: string;
+  status: TripStatus;
+  max_participants?: number | null;
+  invite_code?: string;
+  manager?: number | null;
+  manager_name?: string | null;
+  participant_count?: number;
 };
 
 export type TripCreate = {
   title: string;
-  start_date?: string;
-  end_date?: string;
+  destination: string;
+  start_date: string;
+  end_date: string;
+  max_participants?: number | null;
 };
 
-export type Participant = {
+export type TripDetail = Trip & {
+  invite_code: string;
+  participant_count: number;
+  heart_rate_min: number | null;
+  heart_rate_max: number | null;
+  spo2_min: string | null;
+  geofence_center_lat: string | null;
+  geofence_center_lng: string | null;
+  geofence_radius_km: string | null;
+  participants: TripParticipant[];
+};
+
+export type Traveler = {
   id: number;
-  name?: string;
-  user?: number;
+  last_name_kr: string;
+  first_name_kr: string;
+  full_name_kr: string;
+  first_name_en: string;
+  last_name_en: string;
+  phone: string;
+  email: string;
+  birth_date: string;
+  gender: 'M' | 'F';
+};
+
+export type TripParticipant = {
+  id: number;
+  trip: number;
+  traveler: Traveler;
+  traveler_id?: number;
+  invite_code?: string;
+  joined_date: string;
+};
+
+export type TripParticipantOverview = TripParticipant & {
+  trip_id: number;
+  trip_title: string;
+  trip_destination: string;
+  trip_status: TripStatus;
+  trip_start_date: string;
+  trip_end_date: string;
+  trip_manager_name: string | null;
+  trip_manager_phone: string | null;
+  max_participants: number | null;
 };
 
 // ─── Schedules ────────────────────────────────────────────────────────────────
 export type Schedule = {
   id: number;
   trip: number;
-  title: string;
-  starts_at?: string | null; // ISO8601 문자열 가정
-  ends_at?: string | null;   // ISO8601 문자열 가정
+  place: number | null;
+  place_id?: number | null;
+  day_number: number;
+  start_time: string;
+  end_time: string;
+  duration_minutes: number | null;
+  transport: string | null;
+  main_content: string | null;
+  meeting_point: string | null;
+  budget: number | null;
+  order: number;
+  place_name: string | null;
+  duration_display: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ScheduleCreate = {
-  trip: number;
-  title: string;
-  starts_at?: string; // 예: '2025-10-20T09:00:00Z'
-  ends_at?: string;   // 예: '2025-10-20T10:00:00Z'
+  place_id?: number | null;
+  day_number: number;
+  start_time: string;
+  end_time: string;
+  transport?: string | null;
+  main_content?: string | null;
+  meeting_point?: string | null;
+  budget?: number | null;
+  order?: number;
+};
+
+export type TravelMode = 'DRIVE' | 'WALK' | 'BICYCLE' | 'TRANSIT';
+
+export type ScheduleRebalanceRequest = {
+  day_number: number;
+  schedule_ids: number[];
+  travel_mode: TravelMode;
+  day_start_time?: string;
+};
+
+export type ScheduleRebalanceSegment = {
+  from_schedule_id: number;
+  to_schedule_id: number;
+  duration_seconds: number;
+  duration_text: string;
+};
+
+export type ScheduleRebalanceResponse = {
+  trip_id: number;
+  day_number: number;
+  travel_mode: TravelMode;
+  resolved_day_start: string;
+  rebalanced_at: string;
+  travel_segments: ScheduleRebalanceSegment[];
+  schedules: Schedule[];
+};
+
+// ─── Places ────────────────────────────────────────────────────────────────────
+export type PlaceCategory = {
+  id: number;
+  name: string;
+  description: string | null;
+  created_at: string;
+};
+
+export type PlaceAlternativeInfo = {
+  place_name?: string;
+  reason?: string;
+  distance_text?: string;
+  eta_minutes?: number;
+  [key: string]: unknown;
+};
+
+export type Place = {
+  id: number;
+  name: string;
+  address: string | null;
+  category?: PlaceCategory | null;
+  category_id?: number | null;
+  entrance_fee?: number | null;
+  activity_time?: string | null;
+  ai_alternative_place?: PlaceAlternativeInfo | string | null;
+  ai_generated_info?: string | null;
+  ai_meeting_point?: string | null;
+  image?: string | null;
+  google_place_id?: string | null;
+  latitude?: string | number | null;
+  longitude?: string | number | null;
+  google_synced_at?: string | null;
+  entrance_fee_display?: string | null;
+  activity_time_display?: string | null;
+  has_image?: boolean;
+  alternative_place_info?: PlaceAlternativeInfo | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PlaceAutocompletePrediction = {
+  description: string;
+  place_id: string;
+  primary_text: string;
+  secondary_text?: string | null;
+};
+
+export type PlaceAutocompleteResponse = {
+  query: string;
+  predictions: PlaceAutocompletePrediction[];
 };

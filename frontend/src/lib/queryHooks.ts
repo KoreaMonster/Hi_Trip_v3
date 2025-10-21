@@ -1,0 +1,199 @@
+'use client';
+
+import { useQuery, type QueryKey, type UseQueryOptions } from '@tanstack/react-query';
+import {
+  autocompletePlaces,
+  getHealth,
+  getMonitoringParticipantHistory,
+  getMonitoringTripAlerts,
+  getMonitoringTripLatest,
+  getProfile,
+  getTripDetail,
+  listCategories,
+  listParticipantOverview,
+  listParticipants,
+  listPendingStaff,
+  listPlaces,
+  listSchedules,
+  listStaff,
+  listTrips,
+  lookupPlace,
+} from '@/lib/api';
+import type {
+  HealthResponse,
+  MonitoringAlert,
+  MonitoringParticipantHistory,
+  ParticipantLatest,
+  Place,
+  PlaceAutocompleteResponse,
+  PlaceCategory,
+  ProfileResponse,
+  Schedule,
+  Trip,
+  TripDetail,
+  TripParticipant,
+  TripParticipantOverview,
+  UserDetail,
+} from '@/types/api';
+
+type BaseOptions<TData> = Omit<UseQueryOptions<TData, Error, TData, QueryKey>, 'queryKey' | 'queryFn'>;
+
+export const useTripsQuery = (options?: BaseOptions<Trip[]>) =>
+  useQuery({
+    queryKey: ['trips'],
+    queryFn: listTrips,
+    staleTime: 1000 * 60 * 5,
+    ...options,
+  });
+
+export const useTripDetailQuery = (tripId?: number, options?: BaseOptions<TripDetail>) =>
+  useQuery({
+    queryKey: ['trips', tripId, 'detail'],
+    queryFn: () => getTripDetail(tripId!),
+    enabled: typeof tripId === 'number',
+    staleTime: 1000 * 30,
+    ...options,
+  });
+
+export const useSchedulesQuery = (trip?: number, options?: BaseOptions<Schedule[]>) =>
+  useQuery({
+    queryKey: ['trips', trip, 'schedules'],
+    queryFn: () => listSchedules(trip!),
+    enabled: typeof trip === 'number',
+    staleTime: 1000 * 60,
+    ...options,
+  });
+
+export const useHealthQuery = (options?: BaseOptions<HealthResponse>) =>
+  useQuery({
+    queryKey: ['health'],
+    queryFn: getHealth,
+    refetchInterval: 1000 * 60,
+    ...options,
+  });
+
+export const useMonitoringAlertsQuery = (
+  tripId?: number,
+  options?: BaseOptions<MonitoringAlert[]>,
+) =>
+  useQuery({
+    queryKey: ['monitoring', 'alerts', tripId],
+    queryFn: () => getMonitoringTripAlerts(tripId!),
+    enabled: typeof tripId === 'number',
+    refetchInterval: 1000 * 60,
+    ...options,
+  });
+
+export const useMonitoringLatestQuery = (
+  tripId?: number,
+  options?: BaseOptions<ParticipantLatest[]>,
+) =>
+  useQuery({
+    queryKey: ['monitoring', 'latest', tripId],
+    queryFn: () => getMonitoringTripLatest(tripId!),
+    enabled: typeof tripId === 'number',
+    refetchInterval: 1000 * 60,
+    ...options,
+  });
+
+export const useMonitoringParticipantHistoryQuery = (
+  tripId?: number,
+  participantId?: number,
+  options?: BaseOptions<MonitoringParticipantHistory>,
+) =>
+  useQuery({
+    queryKey: ['monitoring', 'history', tripId, participantId],
+    queryFn: () => getMonitoringParticipantHistory(tripId!, participantId!),
+    enabled: typeof tripId === 'number' && typeof participantId === 'number',
+    staleTime: 1000 * 30,
+    ...options,
+  });
+
+export const useParticipantsQuery = (
+  tripId?: number,
+  options?: BaseOptions<TripParticipant[]>,
+) =>
+  useQuery({
+    queryKey: ['trips', tripId, 'participants'],
+    queryFn: () => listParticipants(tripId!),
+    enabled: typeof tripId === 'number',
+    staleTime: 1000 * 60,
+    ...options,
+  });
+
+export const useParticipantOverviewQuery = (
+  params?: { trip?: number; status?: string; manager?: number },
+  options?: BaseOptions<TripParticipantOverview[]>,
+) =>
+  useQuery({
+    queryKey: ['participants', 'overview', params?.trip ?? null, params?.status ?? null, params?.manager ?? null],
+    queryFn: () => listParticipantOverview(params),
+    staleTime: 1000 * 60,
+    ...options,
+  });
+
+export const usePlacesQuery = (options?: BaseOptions<Place[]>) =>
+  useQuery({
+    queryKey: ['places'],
+    queryFn: listPlaces,
+    staleTime: 1000 * 60 * 10,
+    ...options,
+  });
+
+export const usePlaceLookupQuery = (placeId?: string, options?: BaseOptions<Place>) =>
+  useQuery({
+    queryKey: ['places', 'lookup', placeId ?? null],
+    queryFn: () => lookupPlace(placeId!),
+    enabled: Boolean(placeId),
+    staleTime: 1000 * 60 * 10,
+    ...options,
+  });
+
+export const usePlaceAutocompleteQuery = (
+  query: string,
+  sessionToken: string,
+  options?: BaseOptions<PlaceAutocompleteResponse>,
+) =>
+  useQuery({
+    queryKey: ['places', 'autocomplete', query, sessionToken],
+    queryFn: () => autocompletePlaces(query, sessionToken),
+    enabled: query.trim().length >= 2,
+    staleTime: 1000 * 30,
+    ...options,
+  });
+
+export const useCategoriesQuery = (options?: BaseOptions<PlaceCategory[]>) =>
+  useQuery({
+    queryKey: ['place-categories'],
+    queryFn: listCategories,
+    staleTime: 1000 * 60 * 10,
+    ...options,
+  });
+
+export const usePendingStaffQuery = (options?: BaseOptions<UserDetail[]>) =>
+  useQuery({
+    queryKey: ['staff', 'pending'],
+    queryFn: listPendingStaff,
+    staleTime: 1000 * 60,
+    ...options,
+  });
+
+export const useStaffDirectoryQuery = (
+  params?: { is_approved?: boolean },
+  options?: BaseOptions<UserDetail[]>,
+) =>
+  useQuery({
+    queryKey: ['staff', 'directory', params],
+    queryFn: () => listStaff(params),
+    staleTime: 1000 * 60,
+    ...options,
+  });
+
+export const useProfileQuery = (options?: BaseOptions<ProfileResponse>) =>
+  useQuery({
+    queryKey: ['auth', 'profile'],
+    queryFn: getProfile,
+    staleTime: 1000 * 30,
+    retry: false,
+    ...options,
+  });

@@ -27,9 +27,36 @@ SECRET_KEY = 'django-insecure-l(i$#zrc*y$ry$5pm&0eef5q$=_7jvfmiy7xz=5h6dpkr7kj7)
 DEBUG = True
 
 ALLOWED_HOSTS = [
-        'localhost',
+    'localhost',
     '127.0.0.1',
-    'diphthongic-unluxuriantly-elle.ngrok-free.dev']
+    'diphthongic-unluxuriantly-elle.ngrok-free.dev',
+]
+
+
+# 로컬 개발 시 사용할 수 있는 기본 프런트엔드 오리진 목록입니다.
+# 필요하다면 FRONTEND_ORIGINS 환경 변수에 콤마로 구분해 추가 값을 지정하세요.
+DEFAULT_FRONTEND_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://0.0.0.0:3000",
+    "http://[::1]:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+
+def _parse_origin_list(raw_value: str | None, fallback: list[str]) -> list[str]:
+    if not raw_value:
+        return fallback
+
+    parsed = [item.strip() for item in raw_value.split(",") if item.strip()]
+    return parsed or fallback
+
+
+FRONTEND_ORIGINS = _parse_origin_list(
+    config("FRONTEND_ORIGINS", default=",".join(DEFAULT_FRONTEND_ORIGINS)),
+    DEFAULT_FRONTEND_ORIGINS,
+)
 
 # Application definition
 
@@ -79,13 +106,14 @@ DATABASES = {
 }
 
 # CORS 설정
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # React 기본 포트
-    'http://127.0.0.1:3000',  # (혹시 모르니 이것도 추가)
-    "http://localhost:5173",
-    "http://localhost:8000"
+CORS_ALLOWED_ORIGINS = FRONTEND_ORIGINS
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^http://(?:10|192\.168)\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}:[0-9]{2,5}$",
+    r"^http://172\.(?:1[6-9]|2[0-9]|3[0-1])\.[0-9]{1,3}\.[0-9]{1,3}:[0-9]{2,5}$",
 ]
 CORS_ALLOW_CREDENTIALS = True  # 🔑 이게 핵심!
+
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(FRONTEND_ORIGINS + ["http://localhost:8000"]))
 
 # REST Framework 설정
 REST_FRAMEWORK = {

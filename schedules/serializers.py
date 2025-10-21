@@ -1,5 +1,6 @@
 """Schedules 앱에서 사용할 Serializer 정의."""
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Max
 from rest_framework import serializers
 from typing import Any, Optional
 
@@ -92,6 +93,9 @@ class ScheduleSerializer(serializers.ModelSerializer):
             'updated_at',
             'trip',
         ]
+        extra_kwargs = {
+            'order': {'required': False},
+        }
 
     def get_duration_display(self, obj: Schedule) -> str:
         """
@@ -207,6 +211,13 @@ class ScheduleSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         """새로운 Schedule 인스턴스를 생성할 때 모델 검증을 함께 실행합니다."""
 
+        trip = self.context.get("trip") or validated_data.get("trip")
+        day_number = validated_data.get("day_number")
+        order = validated_data.get("order")
+
+        if trip and day_number is not None and (order is None or order <= 0):
+            validated_data["order"] = self._resolve_default_order(trip, day_number)
+
         schedule = Schedule(**validated_data)
         self._run_model_validation(schedule)
         schedule.save()
@@ -220,6 +231,16 @@ class ScheduleSerializer(serializers.ModelSerializer):
         self._run_model_validation(instance)
         instance.save()
         return instance
+
+    def _resolve_default_order(self, trip, day_number: int) -> int:
+        """같은 일차에서 가장 큰 순서를 찾아 +1 값을 반환합니다."""
+
+        max_order = (
+            Schedule.objects.filter(trip=trip, day_number=day_number).aggregate(max_order=Max("order"))[
+                "max_order"
+            ]
+        )
+        return (max_order or 0) + 1
 
 
 class PlaceCategorySerializer(serializers.ModelSerializer):
@@ -267,7 +288,6 @@ class PlaceSerializer(serializers.ModelSerializer):
 
     #읽기 전용 추가 필드
     entrance_fee_display = serializers.CharField(
-        # source='entrance_fee_display',          # ✅ TYPO CORRECTED
         read_only=True,
         help_text="포맷된 입장료"
     )
@@ -283,6 +303,11 @@ class PlaceSerializer(serializers.ModelSerializer):
         help_text="이미지 존재 여부"
     )
     image = serializers.ImageField(required=False, allow_null=True)  # 테스트 요구에 맞춰 조정
+
+    google_place_id = serializers.CharField(read_only=True, allow_null=True)
+    latitude = serializers.DecimalField(max_digits=9, decimal_places=6, read_only=True, allow_null=True)
+    longitude = serializers.DecimalField(max_digits=9, decimal_places=6, read_only=True, allow_null=True)
+    google_synced_at = serializers.DateTimeField(read_only=True, allow_null=True)
 
 
     # ========== AI 대체 장소 정보 (파싱) ==========
@@ -307,6 +332,10 @@ class PlaceSerializer(serializers.ModelSerializer):
             'ai_generated_info',
             'ai_meeting_point',
             'image',
+            'google_place_id',
+            'latitude',
+            'longitude',
+            'google_synced_at',
 
             # 추가 필드 (읽기 전용)
             'entrance_fee_display',
@@ -341,6 +370,18 @@ class PlaceSerializer(serializers.ModelSerializer):
         if value is not None and value < 0:
             raise serializers.ValidationError('입장료는 0 이상이어야 합니다.')
         return value
+
+
+class PlaceAutocompletePredictionSerializer(serializers.Serializer):
+    description = serializers.CharField()
+    place_id = serializers.CharField()
+    primary_text = serializers.CharField()
+    secondary_text = serializers.CharField(allow_null=True, required=False)
+
+
+class PlaceAutocompleteResponseSerializer(serializers.Serializer):
+    query = serializers.CharField()
+    predictions = PlaceAutocompletePredictionSerializer(many=True)
 
     def validate_ai_alternative_place(self, value):
         """

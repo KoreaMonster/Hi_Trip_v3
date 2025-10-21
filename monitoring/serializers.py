@@ -125,6 +125,24 @@ class DemoGenerationSerializer(serializers.Serializer):
         )
 
 
+class DemoGenerationResultSerializer(serializers.Serializer):
+    """데모 데이터 생성 요청의 응답 구조."""
+
+    created_records = serializers.IntegerField(read_only=True)
+    minutes = serializers.IntegerField(read_only=True)
+    interval_seconds = serializers.IntegerField(read_only=True)
+
+
+class ParticipantHistorySerializer(serializers.Serializer):
+    """특정 참가자의 건강·위치 측정 이력을 반환한다."""
+
+    participant_id = serializers.IntegerField(read_only=True)
+    traveler_name = serializers.CharField(read_only=True)
+    trip_id = serializers.IntegerField(read_only=True)
+    health = HealthSnapshotSerializer(many=True, read_only=True)
+    location = LocationSnapshotSerializer(many=True, read_only=True)
+
+
 # 향후 개선 사항:
 # - Serializer에 geofence 기준점 등 Trip의 메타 데이터를 포함해 주면 프런트에서
 #   지도 반경을 그릴 때 별도의 API 호출이 필요 없습니다.

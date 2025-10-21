@@ -3,10 +3,11 @@
 from rest_framework.routers import DefaultRouter
 from rest_framework_nested.routers import NestedSimpleRouter
 
-from .views import TripParticipantViewSet, TripViewSet
+from .views import ParticipantOverviewViewSet, TripParticipantViewSet, TripViewSet
 
 router = DefaultRouter()
 router.register("trips", TripViewSet, basename="trip")
+router.register("participants-overview", ParticipantOverviewViewSet, basename="participant-overview")
 
 trip_router = NestedSimpleRouter(router, r"trips", lookup="trip")
 trip_router.register(

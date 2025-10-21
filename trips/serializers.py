@@ -23,6 +23,7 @@ class TripSerializer(serializers.ModelSerializer):
             "start_date",
             "end_date",
             "status",
+            "max_participants",
             "invite_code",
             "manager",
             "manager_name",
@@ -88,6 +89,10 @@ class TripSerializer(serializers.ModelSerializer):
                 )
             if geofence_radius is not None and geofence_radius <= 0:
                 raise serializers.ValidationError("지오펜스 반경은 0보다 커야 합니다.")
+
+        max_participants = data.get("max_participants")
+        if max_participants is not None and max_participants <= 0:
+            raise serializers.ValidationError("최대 참가 인원은 1명 이상이어야 합니다.")
 
         return data
 
@@ -160,6 +165,56 @@ class TripDetailSerializer(TripSerializer):
         """참가자 목록을 직렬화해 반환한다."""
 
         return TripParticipantSerializer(obj.participants.all(), many=True).data
+
+
+class TripParticipantOverviewSerializer(TripParticipantSerializer):
+    trip_id = serializers.IntegerField(source="trip.id", read_only=True)
+    trip_title = serializers.CharField(source="trip.title", read_only=True)
+    trip_destination = serializers.CharField(source="trip.destination", read_only=True)
+    trip_status = serializers.CharField(source="trip.status", read_only=True)
+    trip_start_date = serializers.DateField(source="trip.start_date", read_only=True)
+    trip_end_date = serializers.DateField(source="trip.end_date", read_only=True)
+    trip_manager_name = serializers.SerializerMethodField()
+    trip_manager_phone = serializers.SerializerMethodField()
+    max_participants = serializers.IntegerField(source="trip.max_participants", read_only=True)
+
+    class Meta(TripParticipantSerializer.Meta):
+        fields = TripParticipantSerializer.Meta.fields + [
+            "trip_id",
+            "trip_title",
+            "trip_destination",
+            "trip_status",
+            "trip_start_date",
+            "trip_end_date",
+            "trip_manager_name",
+            "trip_manager_phone",
+            "max_participants",
+        ]
+        read_only_fields = [
+            "id",
+            "trip",
+            "traveler",
+            "joined_date",
+            "trip_id",
+            "trip_title",
+            "trip_destination",
+            "trip_status",
+            "trip_start_date",
+            "trip_end_date",
+            "trip_manager_name",
+            "trip_manager_phone",
+            "max_participants",
+        ]
+
+    def get_trip_manager_name(self, obj: TripParticipant) -> str | None:
+        if obj.trip.manager:
+            return obj.trip.manager.full_name_kr
+        return None
+
+    def get_trip_manager_phone(self, obj: TripParticipant) -> str | None:
+        if obj.trip.manager:
+            return obj.trip.manager.phone
+        return None
 
 class AssignManagerSerializer(serializers.Serializer):
     """총괄담당자가 여행 담당자를 교체할 때 사용하는 전용 Serializer."""
