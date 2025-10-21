@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -74,6 +74,7 @@ export default function SchedulesPage() {
   const [localScheduleIds, setLocalScheduleIds] = useState<number[]>([]);
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [hasLocalReorder, setHasLocalReorder] = useState(false);
+  const activeScheduleSignatureRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (trips.length === 0) {
@@ -182,8 +183,15 @@ export default function SchedulesPage() {
 
   useEffect(() => {
     const nextIds = activeDaySchedules.map((schedule) => schedule.id);
-    setLocalScheduleIds((prev) => (arraysEqual(prev, nextIds) ? prev : nextIds));
-    setHasLocalReorder((prev) => (prev ? false : prev));
+    const signature = nextIds.join(',');
+
+    if (activeScheduleSignatureRef.current === signature) {
+      return;
+    }
+
+    activeScheduleSignatureRef.current = signature;
+    setLocalScheduleIds(nextIds);
+    setHasLocalReorder(false);
   }, [activeDaySchedules]);
 
   const activeScheduleMap = useMemo(() => {
