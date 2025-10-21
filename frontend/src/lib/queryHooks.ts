@@ -7,6 +7,7 @@ import {
   getMonitoringTripLatest,
   getProfile,
   getTripDetail,
+  getPlaceSummaryCard,
   listCategories,
   listParticipants,
   listPendingStaff,
@@ -14,8 +15,11 @@ import {
   listSchedules,
   listStaff,
   listTrips,
+  createAlternativeRecommendations,
 } from '@/lib/api';
 import type {
+  AlternativePlaceRecommendationRequest,
+  AlternativePlaceRecommendationResponse,
   HealthResponse,
   MonitoringAlert,
   ParticipantLatest,
@@ -26,6 +30,7 @@ import type {
   Trip,
   TripDetail,
   TripParticipant,
+  PlaceSummaryCard,
   UserDetail,
 } from '@/types/api';
 
@@ -114,6 +119,27 @@ export const useCategoriesQuery = (options?: BaseOptions<PlaceCategory[]>) =>
     queryKey: ['place-categories'],
     queryFn: listCategories,
     staleTime: 1000 * 60 * 10,
+    ...options,
+  });
+
+export const usePlaceSummaryCardQuery = (placeId?: number, options?: BaseOptions<PlaceSummaryCard>) =>
+  useQuery({
+    queryKey: ['places', placeId, 'summary-card'],
+    queryFn: () => getPlaceSummaryCard(placeId!),
+    enabled: typeof placeId === 'number',
+    staleTime: 1000 * 60 * 30,
+    ...options,
+  });
+
+export const useAlternativeRecommendationsQuery = (
+  request?: AlternativePlaceRecommendationRequest | null,
+  options?: BaseOptions<AlternativePlaceRecommendationResponse>,
+) =>
+  useQuery({
+    queryKey: ['place-recommendations', 'alternatives', request],
+    queryFn: () => createAlternativeRecommendations(request!),
+    enabled: Boolean(request),
+    staleTime: 1000 * 60 * 15,
     ...options,
   });
 

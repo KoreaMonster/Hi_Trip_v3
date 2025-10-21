@@ -172,6 +172,7 @@ export type Place = {
   id: number;
   name: string;
   address: string | null;
+  google_place_id?: string | null;
   category?: PlaceCategory | null;
   category_id?: number | null;
   entrance_fee?: number | null;
@@ -186,4 +187,78 @@ export type Place = {
   alternative_place_info?: PlaceAlternativeInfo | null;
   created_at: string;
   updated_at: string;
+};
+
+export type PlaceUpdateSource = {
+  id: number;
+  name: string;
+  url: string;
+  note: string | null;
+};
+
+export type PlaceSummaryCardUpdate = {
+  id: number;
+  title: string;
+  description: string;
+  source_url: string;
+  published_at: string;
+  is_official: boolean;
+  is_recent: boolean;
+  sources: PlaceUpdateSource[];
+};
+
+export type PlaceSummaryCard = {
+  id: number;
+  place_id: number;
+  generated_lines: string[];
+  sources: string[];
+  generator: string;
+  generated_at: string | null;
+  cached_at: string | null;
+  is_cache_valid: boolean;
+  created_by: string | null;
+  updates: PlaceSummaryCardUpdate[];
+};
+
+export type AlternativePlaceRecommendationRequest = {
+  previous_place_id: string;
+  unavailable_place_id: string;
+  next_place_id: string;
+  travel_mode: 'DRIVE' | 'WALK' | 'BICYCLE' | 'TRANSIT';
+};
+
+export type AlternativePlaceRecommendationPlace = {
+  place_id: string;
+  name: string | null;
+  rating: number;
+  user_ratings_total: number | null;
+  types?: string[] | null;
+  location?: {
+    latitude: number | null;
+    longitude: number | null;
+  } | null;
+};
+
+export type AlternativePlaceRecommendation = {
+  place: AlternativePlaceRecommendationPlace;
+  total_duration_seconds: number;
+  total_duration_text?: string | null;
+  delta_seconds: number;
+  delta_text: string;
+};
+
+export type AlternativeRecommendationBaseRoute = {
+  previous_place_id: string;
+  unavailable_place: AlternativePlaceRecommendationPlace;
+  next_place_id: string;
+  original_duration_seconds?: number;
+  original_duration_text?: string | null;
+};
+
+export type AlternativePlaceRecommendationResponse = {
+  base_route: AlternativeRecommendationBaseRoute;
+  alternatives: AlternativePlaceRecommendation[];
+  searched_category: string | null;
+  generated_at: string;
+  detail?: string;
 };

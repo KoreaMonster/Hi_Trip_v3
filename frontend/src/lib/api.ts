@@ -7,6 +7,7 @@ import type {
   ParticipantLatest,
   Place,
   PlaceCategory,
+  PlaceSummaryCard,
   ProfileResponse,
   Schedule,
   ScheduleCreate,
@@ -15,6 +16,8 @@ import type {
   TripDetail,
   TripParticipant,
   UserDetail,
+  AlternativePlaceRecommendationRequest,
+  AlternativePlaceRecommendationResponse,
 } from '@/types/api';
 
 const toTripStatus = (value: Trip['status'] | string | undefined): Trip['status'] => {
@@ -111,6 +114,18 @@ export const listPlaces = async (): Promise<Place[]> =>
 
 export const listCategories = async (): Promise<PlaceCategory[]> =>
   apiRequest(() => apiClient.get('api/categories/').json<PlaceCategory[]>());
+
+export const getPlaceSummaryCard = async (placeId: number): Promise<PlaceSummaryCard> =>
+  apiRequest(() => apiClient.get(`api/places/${placeId}/summary-card/`).json<PlaceSummaryCard>());
+
+export const createAlternativeRecommendations = async (
+  body: AlternativePlaceRecommendationRequest,
+): Promise<AlternativePlaceRecommendationResponse> =>
+  apiRequest(() =>
+    apiClient
+      .post('api/place-recommendations/alternatives/', { json: body })
+      .json<AlternativePlaceRecommendationResponse>(),
+  );
 
 export const listPendingStaff = async (): Promise<UserDetail[]> =>
   apiRequest(async () => {

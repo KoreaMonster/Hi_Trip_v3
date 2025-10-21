@@ -299,6 +299,7 @@ class PlaceSerializer(serializers.ModelSerializer):
             'id',
             'name',
             'address',
+            'google_place_id',
             'category',  # 읽기: 중첩 객체
             'category_id',  # 쓰기: ID
             'entrance_fee',
