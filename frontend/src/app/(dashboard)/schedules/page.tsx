@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CalendarClock, ChevronDown, Clock8, MapPin, Route } from 'lucide-react';
@@ -250,7 +251,25 @@ export default function SchedulesPage() {
                     </div>
                     <div className="flex-1 rounded-2xl border border-white bg-white px-5 py-4 shadow-sm">
                       <p className="text-sm font-semibold text-slate-900">
-                        {schedule.main_content ?? schedule.place_name ?? '세부 일정 미정'}
+                        {(() => {
+                          const placeId =
+                            typeof schedule.place === 'number'
+                              ? schedule.place
+                              : schedule.place_id ?? null;
+                          const placeLabel = schedule.place_name;
+                          const mainLabel = schedule.main_content;
+                          if (placeId && placeLabel) {
+                            return (
+                              <>
+                                {mainLabel && mainLabel !== placeLabel ? `${mainLabel} · ` : null}
+                                <Link href={`/places/${placeId}`} className="text-primary-600 hover:underline">
+                                  {placeLabel}
+                                </Link>
+                              </>
+                            );
+                          }
+                          return mainLabel ?? placeLabel ?? '세부 일정 미정';
+                        })()}
                       </p>
                       <p className="mt-1 text-xs text-slate-500">
                         {schedule.meeting_point ?? '집결지 미정'} · 이동 수단 {schedule.transport ?? '미정'}

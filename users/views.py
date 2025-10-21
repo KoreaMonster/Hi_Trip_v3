@@ -5,17 +5,19 @@ from __future__ import annotations
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.contrib.sessions.models import Session
 from drf_spectacular.utils import extend_schema
-from rest_framework import status, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .models import Traveler
 from .permissions import IsApprovedStaff, IsSuperAdminUser
-from .serializers import LoginSerializer, UserDetailSerializer, UserSerialization
 from .serializers import (
     LoginSerializer,
     LogoutResponseSerializer,
+    TravelerDetailSerializer,
+    TravelerSerializer,
     UserDetailSerializer,
     UserSerialization,
 )
@@ -106,6 +108,18 @@ class UserViewSet(viewsets.ModelViewSet):
                 "user": UserDetailSerializer(user_to_approve).data,
             }
         )
+
+
+class TravelerViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+    """여행 고객(Traveler) 정보를 조회하는 전용 ViewSet."""
+
+    queryset = Traveler.objects.all().order_by("last_name_kr", "first_name_kr")
+    permission_classes = [IsAuthenticated, IsApprovedStaff]
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return TravelerSerializer
+        return TravelerDetailSerializer
 
 
 class LoginAPIView(APIView):
