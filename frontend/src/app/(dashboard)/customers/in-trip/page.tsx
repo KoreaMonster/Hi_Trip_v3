@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ActivitySquare,
@@ -75,19 +75,70 @@ const findLastUpdated = (snapshots: ParticipantLatest[]): string | null => {
 
 export default function InTripCustomersPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const searchParamsString = useMemo(() => searchParams?.toString() ?? '', [searchParams]);
   const queryClient = useQueryClient();
   const { data: trips = [], isLoading: tripsLoading } = useTripsQuery();
   const ongoingTrips = useMemo(
     () => trips.filter((trip) => trip.status === 'ongoing'),
     [trips],
   );
-  const [selectedTripId, setSelectedTripId] = useState<number | null>(null);
+  const initialTripIdFromQuery = useMemo(() => {
+    if (!searchParams) return null;
+    const value = searchParams.get('tripId');
+    if (!value) return null;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return null;
+    return parsed;
+  }, [searchParams]);
+  const [selectedTripId, setSelectedTripId] = useState<number | null>(initialTripIdFromQuery);
 
   useEffect(() => {
-    if (ongoingTrips.length > 0 && selectedTripId === null) {
-      setSelectedTripId(ongoingTrips[0].id);
+    if (ongoingTrips.length === 0) {
+      if (selectedTripId !== null) {
+        setSelectedTripId(null);
+      }
+      return;
     }
-  }, [ongoingTrips, selectedTripId]);
+
+    const hasSelectedTrip = selectedTripId !== null && ongoingTrips.some((trip) => trip.id === selectedTripId);
+    if (hasSelectedTrip) {
+      return;
+    }
+
+    const queryTripIsAvailable =
+      initialTripIdFromQuery !== null && ongoingTrips.some((trip) => trip.id === initialTripIdFromQuery);
+
+    if (queryTripIsAvailable) {
+      setSelectedTripId(initialTripIdFromQuery);
+      return;
+    }
+
+    setSelectedTripId(ongoingTrips[0].id);
+  }, [initialTripIdFromQuery, ongoingTrips, selectedTripId]);
+
+  useEffect(() => {
+    if (!pathname) return;
+
+    const params = new URLSearchParams(searchParamsString);
+
+    if (selectedTripId !== null) {
+      const next = String(selectedTripId);
+      if (params.get('tripId') === next) {
+        return;
+      }
+      params.set('tripId', next);
+    } else {
+      if (!params.has('tripId')) {
+        return;
+      }
+      params.delete('tripId');
+    }
+
+    const query = params.toString();
+    router.replace(query.length > 0 ? `${pathname}?${query}` : pathname);
+  }, [pathname, router, searchParamsString, selectedTripId]);
 
   const selectedTrip = useMemo<Trip | undefined>(
     () => ongoingTrips.find((trip) => trip.id === (selectedTripId ?? -1)),
