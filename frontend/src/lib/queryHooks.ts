@@ -2,19 +2,22 @@
 
 import { useQuery, type QueryKey, type UseQueryOptions } from '@tanstack/react-query';
 import {
+  autocompletePlaces,
   getHealth,
+  getMonitoringParticipantHistory,
   getMonitoringTripAlerts,
   getMonitoringTripLatest,
-  getMonitoringParticipantHistory,
   getProfile,
   getTripDetail,
   listCategories,
+  listParticipantOverview,
   listParticipants,
   listPendingStaff,
   listPlaces,
   listSchedules,
   listStaff,
   listTrips,
+  lookupPlace,
 } from '@/lib/api';
 import type {
   HealthResponse,
@@ -22,12 +25,14 @@ import type {
   MonitoringParticipantHistory,
   ParticipantLatest,
   Place,
+  PlaceAutocompleteResponse,
   PlaceCategory,
   ProfileResponse,
   Schedule,
   Trip,
   TripDetail,
   TripParticipant,
+  TripParticipantOverview,
   UserDetail,
 } from '@/types/api';
 
@@ -116,11 +121,44 @@ export const useParticipantsQuery = (
     ...options,
   });
 
+export const useParticipantOverviewQuery = (
+  params?: { trip?: number; status?: string; manager?: number },
+  options?: BaseOptions<TripParticipantOverview[]>,
+) =>
+  useQuery({
+    queryKey: ['participants', 'overview', params?.trip ?? null, params?.status ?? null, params?.manager ?? null],
+    queryFn: () => listParticipantOverview(params),
+    staleTime: 1000 * 60,
+    ...options,
+  });
+
 export const usePlacesQuery = (options?: BaseOptions<Place[]>) =>
   useQuery({
     queryKey: ['places'],
     queryFn: listPlaces,
     staleTime: 1000 * 60 * 10,
+    ...options,
+  });
+
+export const usePlaceLookupQuery = (placeId?: string, options?: BaseOptions<Place>) =>
+  useQuery({
+    queryKey: ['places', 'lookup', placeId ?? null],
+    queryFn: () => lookupPlace(placeId!),
+    enabled: Boolean(placeId),
+    staleTime: 1000 * 60 * 10,
+    ...options,
+  });
+
+export const usePlaceAutocompleteQuery = (
+  query: string,
+  sessionToken: string,
+  options?: BaseOptions<PlaceAutocompleteResponse>,
+) =>
+  useQuery({
+    queryKey: ['places', 'autocomplete', query, sessionToken],
+    queryFn: () => autocompletePlaces(query, sessionToken),
+    enabled: query.trim().length >= 2,
+    staleTime: 1000 * 30,
     ...options,
   });
 

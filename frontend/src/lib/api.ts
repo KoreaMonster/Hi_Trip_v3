@@ -9,6 +9,7 @@ import type {
   MonitoringParticipantHistory,
   ParticipantLatest,
   Place,
+  PlaceAutocompleteResponse,
   PlaceCategory,
   ProfileResponse,
   Schedule,
@@ -19,6 +20,7 @@ import type {
   TripCreate,
   TripDetail,
   TripParticipant,
+  TripParticipantOverview,
   UserDetail,
 } from '@/types/api';
 
@@ -64,12 +66,14 @@ const deriveTripStatus = (
 const normalizeTrip = (trip: Trip): Trip => ({
   ...trip,
   status: deriveTripStatus(trip.status, trip.start_date, trip.end_date),
+  max_participants: trip.max_participants ?? null,
 });
 
 const normalizeTripDetail = (trip: TripDetail): TripDetail => ({
   ...trip,
   status: deriveTripStatus(trip.status, trip.start_date, trip.end_date),
   participants: trip.participants ?? [],
+  max_participants: trip.max_participants ?? null,
 });
 
 export const getHealth = async (): Promise<HealthResponse> =>
@@ -142,11 +146,52 @@ export const createTrip = async (body: TripCreate): Promise<Trip> =>
 export const listParticipants = async (tripId: number): Promise<TripParticipant[]> =>
   apiRequest(() => apiClient.get(`api/trips/${tripId}/participants/`).json<TripParticipant[]>());
 
+export const listParticipantOverview = async (
+  params?: { trip?: number; status?: string; manager?: number },
+): Promise<TripParticipantOverview[]> =>
+  apiRequest(() => {
+    const searchParams = params
+      ? Object.fromEntries(
+          Object.entries(params)
+            .filter(([, value]) => value !== undefined && value !== null && value !== '')
+            .map(([key, value]) => [key, String(value)]),
+        )
+      : undefined;
+
+    return apiClient
+      .get('api/participants-overview/', { searchParams })
+      .json<TripParticipantOverview[]>();
+  });
+
 export const listPlaces = async (): Promise<Place[]> =>
   apiRequest(() => apiClient.get('api/places/').json<Place[]>());
 
 export const listCategories = async (): Promise<PlaceCategory[]> =>
   apiRequest(() => apiClient.get('api/categories/').json<PlaceCategory[]>());
+
+export const autocompletePlaces = async (
+  query: string,
+  sessionToken?: string,
+): Promise<PlaceAutocompleteResponse> =>
+  apiRequest(() =>
+    apiClient
+      .get('api/place-recommendations/autocomplete/', {
+        searchParams: {
+          query,
+          ...(sessionToken ? { session_token: sessionToken } : {}),
+        },
+      })
+      .json<PlaceAutocompleteResponse>(),
+  );
+
+export const lookupPlace = async (placeId: string): Promise<Place> =>
+  apiRequest(() =>
+    apiClient
+      .get('api/place-recommendations/lookup/', {
+        searchParams: { place_id: placeId },
+      })
+      .json<Place>(),
+  );
 
 export const listPendingStaff = async (): Promise<UserDetail[]> =>
   apiRequest(async () => {

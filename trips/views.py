@@ -13,6 +13,7 @@ from .models import Trip, TripParticipant
 from .serializers import (
     AssignManagerSerializer,
     TripDetailSerializer,
+    TripParticipantOverviewSerializer,
     TripParticipantSerializer,
     TripSerializer,
 )
@@ -164,4 +165,32 @@ class TripParticipantViewSet(
             ).data,
         }
         return Response(data, status=status.HTTP_201_CREATED, headers=headers)
+
+
+class ParticipantOverviewViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+    """총괄담당자를 위한 전체 참가자 조회 뷰."""
+
+    serializer_class = TripParticipantOverviewSerializer
+    permission_classes = [IsAuthenticated, IsSuperAdminUser]
+
+    def get_queryset(self):
+        queryset = TripParticipant.objects.select_related(
+            "trip",
+            "traveler",
+            "trip__manager",
+        )
+
+        trip_id = self.request.query_params.get("trip")
+        if trip_id:
+            queryset = queryset.filter(trip_id=trip_id)
+
+        status_filter = self.request.query_params.get("status")
+        if status_filter:
+            queryset = queryset.filter(trip__status=status_filter)
+
+        manager_id = self.request.query_params.get("manager")
+        if manager_id:
+            queryset = queryset.filter(trip__manager_id=manager_id)
+
+        return queryset.order_by("-joined_date")
 

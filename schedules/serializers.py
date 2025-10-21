@@ -288,7 +288,6 @@ class PlaceSerializer(serializers.ModelSerializer):
 
     #읽기 전용 추가 필드
     entrance_fee_display = serializers.CharField(
-        # source='entrance_fee_display',          # ✅ TYPO CORRECTED
         read_only=True,
         help_text="포맷된 입장료"
     )
@@ -304,6 +303,11 @@ class PlaceSerializer(serializers.ModelSerializer):
         help_text="이미지 존재 여부"
     )
     image = serializers.ImageField(required=False, allow_null=True)  # 테스트 요구에 맞춰 조정
+
+    google_place_id = serializers.CharField(read_only=True, allow_null=True)
+    latitude = serializers.DecimalField(max_digits=9, decimal_places=6, read_only=True, allow_null=True)
+    longitude = serializers.DecimalField(max_digits=9, decimal_places=6, read_only=True, allow_null=True)
+    google_synced_at = serializers.DateTimeField(read_only=True, allow_null=True)
 
 
     # ========== AI 대체 장소 정보 (파싱) ==========
@@ -328,6 +332,10 @@ class PlaceSerializer(serializers.ModelSerializer):
             'ai_generated_info',
             'ai_meeting_point',
             'image',
+            'google_place_id',
+            'latitude',
+            'longitude',
+            'google_synced_at',
 
             # 추가 필드 (읽기 전용)
             'entrance_fee_display',
@@ -362,6 +370,18 @@ class PlaceSerializer(serializers.ModelSerializer):
         if value is not None and value < 0:
             raise serializers.ValidationError('입장료는 0 이상이어야 합니다.')
         return value
+
+
+class PlaceAutocompletePredictionSerializer(serializers.Serializer):
+    description = serializers.CharField()
+    place_id = serializers.CharField()
+    primary_text = serializers.CharField()
+    secondary_text = serializers.CharField(allow_null=True, required=False)
+
+
+class PlaceAutocompleteResponseSerializer(serializers.Serializer):
+    query = serializers.CharField()
+    predictions = PlaceAutocompletePredictionSerializer(many=True)
 
     def validate_ai_alternative_place(self, value):
         """

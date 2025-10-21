@@ -157,6 +157,7 @@ class Command(BaseCommand):
             "heart_rate_min": 55,
             "heart_rate_max": 110,
             "spo2_min": "94.00",
+            "max_participants": 24,
         }
         trip, _ = Trip.objects.update_or_create(
             title="서울 문화 탐방 1박 2일",

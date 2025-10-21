@@ -38,6 +38,7 @@ from .serializers import (
     OptionalExpenseSerializer,
     PlaceCategorySerializer,
     PlaceCoordinatorSerializer,
+    PlaceAutocompleteResponseSerializer,
     PlaceSerializer,
     PlaceSummaryCardSerializer,
     ScheduleSerializer,
@@ -54,6 +55,7 @@ from .services import (
     build_location_payload,
     build_place_id_payload,
     compute_route_duration,
+    fetch_place_autocomplete,
     fetch_nearby_places,
     fetch_place_details,
     geocode_address,
@@ -506,6 +508,80 @@ class PlaceRecommendationViewSet(viewsets.ViewSet):
     # 대체 장소 탐색은 1km 반경에서 3~5개의 후보를 제시해야 하므로 별도 상수를 둡니다.
     ALTERNATIVE_RADIUS_METERS = 1_000
     MAX_ALTERNATIVE_RESULTS = 5
+
+    @extend_schema(
+        summary="Google Places 자동완성",
+        description="검색어를 기반으로 Google Places Autocomplete 후보를 반환합니다.",
+        parameters=[],
+        responses={200: PlaceAutocompleteResponseSerializer},
+    )
+    @action(detail=False, methods=["get"], url_path="autocomplete")
+    def autocomplete(self, request, *args, **kwargs):
+        query = request.query_params.get("query") or request.query_params.get("input")
+        if not query:
+            return Response(
+                {"detail": "query 파라미터를 입력해 주세요."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        session_token = request.query_params.get("session_token")
+        language = request.query_params.get("language", "ko")
+
+        try:
+            predictions = fetch_place_autocomplete(
+                input_text=query,
+                language=language,
+                session_token=session_token,
+            )
+        except GoogleMapsError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+        serializer = PlaceAutocompleteResponseSerializer(
+            {
+                "query": query,
+                "predictions": [
+                    {
+                        "description": item.description,
+                        "place_id": item.place_id,
+                        "primary_text": item.primary_text,
+                        "secondary_text": item.secondary_text,
+                    }
+                    for item in predictions
+                ],
+            }
+        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        summary="Google Place 상세 동기화",
+        description="place_id를 기반으로 Google Place 상세 정보를 동기화하고 결과를 반환합니다.",
+        responses={200: PlaceSerializer},
+    )
+    @action(detail=False, methods=["get"], url_path="lookup")
+    def lookup(self, request, *args, **kwargs):
+        place_id = request.query_params.get("place_id")
+        if not place_id:
+            return Response(
+                {"detail": "place_id 파라미터가 필요합니다."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        language = request.query_params.get("language", "ko")
+        try:
+            google_place = fetch_place_details(place_id, language=language)
+        except GoogleMapsError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+        self._sync_place_metadata(google_place)
+        place = Place.objects.filter(google_place_id=google_place.place_id).first()
+        if place is None:
+            return Response(
+                {"detail": "장소 정보를 저장하지 못했습니다."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        serializer = PlaceSerializer(place, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @extend_schema(
         summary="고정된 카테고리 5종에 대한 추천 목록 생성",

@@ -2,10 +2,11 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { CalendarClock, ChevronDown, Clock8, MapPin, RefreshCcw, Route } from 'lucide-react';
+import { CalendarClock, ChevronDown, Clock8, MapPin, RefreshCcw, Route, Search } from 'lucide-react';
 import { createSchedule, rebalanceTripSchedules } from '@/lib/api';
-import { useSchedulesQuery, useTripsQuery } from '@/lib/queryHooks';
+import { usePlaceAutocompleteQuery, usePlaceLookupQuery, useSchedulesQuery, useTripsQuery } from '@/lib/queryHooks';
 import type {
+  Place,
   Schedule,
   ScheduleCreate,
   ScheduleRebalanceRequest,
@@ -48,6 +49,28 @@ export default function SchedulesPage() {
   const [rebalanceFeedback, setRebalanceFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(
     null,
   );
+  const [placeQuery, setPlaceQuery] = useState('');
+  const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
+  const [pendingLookupId, setPendingLookupId] = useState<string | null>(null);
+  const autocompleteSessionToken = useMemo(() => Math.random().toString(36).slice(2), []);
+
+  const { data: placeSuggestions } = usePlaceAutocompleteQuery(placeQuery, autocompleteSessionToken, {
+    enabled: placeQuery.trim().length >= 2,
+    staleTime: 1000 * 10,
+  });
+
+  const { isFetching: isResolvingPlace } = usePlaceLookupQuery(pendingLookupId ?? undefined, {
+    enabled: Boolean(pendingLookupId),
+    staleTime: 0,
+    onSuccess: (place) => {
+      setSelectedPlace(place);
+      setPendingLookupId(null);
+      setPlaceQuery(place.name ?? '');
+    },
+    onError: () => {
+      setPendingLookupId(null);
+    },
+  });
 
   useEffect(() => {
     if (trips.length > 0 && selectedTripId === null) {
@@ -119,6 +142,8 @@ export default function SchedulesPage() {
       setForm({ ...initialScheduleForm });
       setFormSuccess('새 일정이 추가되었습니다.');
       setFormError(null);
+      setSelectedPlace(null);
+      setPlaceQuery('');
       await queryClient.invalidateQueries({ queryKey: ['trips', variables.tripId, 'schedules'] });
     },
     onError: (error) => {
@@ -176,6 +201,11 @@ export default function SchedulesPage() {
       return;
     }
 
+    if (placeQuery.trim() && !selectedPlace) {
+      setFormError('방문 장소를 자동완성 목록에서 선택해 주세요.');
+      return;
+    }
+
     const normalizedStart = normalizeTime(form.start_time);
     const normalizedEnd = normalizeTime(form.end_time);
     const dayNumber = Number(form.day_number) || 1;
@@ -188,6 +218,7 @@ export default function SchedulesPage() {
     }, 0);
 
     const payload: ScheduleCreate = {
+      place_id: selectedPlace?.id ?? null,
       day_number: dayNumber,
       start_time: normalizedStart,
       end_time: normalizedEnd,
@@ -514,6 +545,65 @@ export default function SchedulesPage() {
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
                 placeholder="예: 문화 체험 프로그램"
               />
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="schedule-place" className="text-sm font-semibold text-slate-700">
+                방문 장소 (Google 자동완성)
+              </label>
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                  <Search className="h-4 w-4" />
+                </span>
+                <input
+                  id="schedule-place"
+                  type="text"
+                  value={placeQuery}
+                  onChange={(event) => {
+                    setPlaceQuery(event.target.value);
+                    if (!event.target.value) {
+                      setSelectedPlace(null);
+                    }
+                  }}
+                  placeholder="장소명 또는 주소를 입력하세요"
+                  className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-10 pr-3 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                  autoComplete="off"
+                />
+              </div>
+              {selectedPlace && (
+                <div className="flex flex-col gap-1 rounded-xl border border-primary-100 bg-primary-50 px-4 py-3 text-xs text-primary-700">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold">{selectedPlace.name}</span>
+                    <span className="text-[11px] text-primary-500">
+                      {isResolvingPlace ? '세부 정보를 불러오는 중...' : '연동 완료'}
+                    </span>
+                  </div>
+                  <span>{selectedPlace.address ?? '주소 정보 없음'}</span>
+                  {selectedPlace.google_place_id && (
+                    <span className="text-[11px] text-primary-500">Google Place ID: {selectedPlace.google_place_id}</span>
+                  )}
+                </div>
+              )}
+              {placeQuery.trim().length >= 2 && (!selectedPlace || selectedPlace.name !== placeQuery) &&
+                (placeSuggestions?.predictions.length ?? 0) > 0 && (
+                <ul className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+                  {placeSuggestions?.predictions.map((prediction) => (
+                    <li key={prediction.place_id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPendingLookupId(prediction.place_id);
+                          setSelectedPlace(null);
+                        }}
+                        className="flex w-full flex-col items-start gap-0.5 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-primary-50"
+                      >
+                        <span className="font-semibold text-slate-800">{prediction.primary_text}</span>
+                        <span className="text-xs text-slate-500">{prediction.secondary_text ?? prediction.description}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             <div className="space-y-2">

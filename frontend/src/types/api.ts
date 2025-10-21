@@ -91,6 +91,7 @@ export type Trip = {
   start_date: string;
   end_date: string;
   status: TripStatus;
+  max_participants?: number | null;
   invite_code?: string;
   manager?: number | null;
   manager_name?: string | null;
@@ -102,6 +103,7 @@ export type TripCreate = {
   destination: string;
   start_date: string;
   end_date: string;
+  max_participants?: number | null;
 };
 
 export type TripDetail = Trip & {
@@ -136,6 +138,18 @@ export type TripParticipant = {
   traveler_id?: number;
   invite_code?: string;
   joined_date: string;
+};
+
+export type TripParticipantOverview = TripParticipant & {
+  trip_id: number;
+  trip_title: string;
+  trip_destination: string;
+  trip_status: TripStatus;
+  trip_start_date: string;
+  trip_end_date: string;
+  trip_manager_name: string | null;
+  trip_manager_phone: string | null;
+  max_participants: number | null;
 };
 
 // ─── Schedules ────────────────────────────────────────────────────────────────
@@ -225,10 +239,26 @@ export type Place = {
   ai_generated_info?: string | null;
   ai_meeting_point?: string | null;
   image?: string | null;
+  google_place_id?: string | null;
+  latitude?: string | number | null;
+  longitude?: string | number | null;
+  google_synced_at?: string | null;
   entrance_fee_display?: string | null;
   activity_time_display?: string | null;
   has_image?: boolean;
   alternative_place_info?: PlaceAlternativeInfo | null;
   created_at: string;
   updated_at: string;
+};
+
+export type PlaceAutocompletePrediction = {
+  description: string;
+  place_id: string;
+  primary_text: string;
+  secondary_text?: string | null;
+};
+
+export type PlaceAutocompleteResponse = {
+  query: string;
+  predictions: PlaceAutocompletePrediction[];
 };

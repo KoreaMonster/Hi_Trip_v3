@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Google Maps 각 서비스의 엔드포인트를 한 곳에 모아두면 유지보수가 쉽습니다.
 GEOCODING_ENDPOINT = "https://maps.googleapis.com/maps/api/geocode/json"
+PLACES_AUTOCOMPLETE_ENDPOINT = "https://maps.googleapis.com/maps/api/place/autocomplete/json"
 PLACES_NEARBY_ENDPOINT = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
 PLACE_DETAILS_ENDPOINT = "https://maps.googleapis.com/maps/api/place/details/json"
 ROUTES_COMPUTE_ENDPOINT = "https://routes.googleapis.com/directions/v2:computeRoutes"
@@ -31,6 +32,7 @@ ROUTE_MATRIX_ENDPOINT = "https://routes.googleapis.com/distanceMatrix/v2:compute
 
 # 서비스별 기본 캐시 시간(초). 프로젝트 요구사항에 맞춰 필요시 조정합니다.
 GEOCODING_CACHE_SECONDS = 60 * 60 * 24  # 24시간 유지
+PLACES_AUTOCOMPLETE_CACHE_SECONDS = 60 * 30  # 30분 유지
 PLACES_CACHE_SECONDS = 60 * 60 * 12     # 12시간 유지
 PLACE_DETAILS_CACHE_SECONDS = 60 * 60 * 24
 ROUTES_CACHE_SECONDS = 60 * 15          # 경로 정보는 교통 상황이 자주 바뀌므로 15분만 유지
@@ -96,6 +98,17 @@ class RouteMatrixElement:
     destination_index: int
     duration_seconds: int
     distance_meters: Optional[int]
+    raw: Dict[str, Any]
+
+
+@dataclass
+class PlacePrediction:
+    """Places Autocomplete API 응답을 구조화한 자료형"""
+
+    description: str
+    place_id: str
+    primary_text: str
+    secondary_text: Optional[str]
     raw: Dict[str, Any]
 
 
@@ -252,6 +265,45 @@ def geocode_address(address: str, language: str = "ko") -> GeocodeResult:
         longitude=location.get("lng"),
         place_id=first.get("place_id"),
     )
+
+
+def fetch_place_autocomplete(
+    *,
+    input_text: str,
+    language: str = "ko",
+    session_token: Optional[str] = None,
+) -> List[PlacePrediction]:
+    """Places Autocomplete API를 호출해 검색어에 맞는 장소 후보를 반환합니다."""
+
+    params: Dict[str, Any] = {
+        "input": input_text,
+        "language": language,
+        "types": "geocode",
+    }
+    if session_token:
+        params["sessiontoken"] = session_token
+
+    data = _perform_get(
+        "place_autocomplete",
+        PLACES_AUTOCOMPLETE_ENDPOINT,
+        params,
+        PLACES_AUTOCOMPLETE_CACHE_SECONDS,
+    )
+
+    predictions: List[PlacePrediction] = []
+    for payload in data.get("predictions", []):
+        structured = payload.get("structured_formatting", {})
+        predictions.append(
+            PlacePrediction(
+                description=payload.get("description", ""),
+                place_id=payload.get("place_id", ""),
+                primary_text=structured.get("main_text", payload.get("description", "")),
+                secondary_text=structured.get("secondary_text"),
+                raw=payload,
+            )
+        )
+
+    return predictions
 
 
 def fetch_nearby_places(
@@ -428,7 +480,9 @@ __all__ = [
     "GooglePlace",
     "RouteDuration",
     "RouteMatrixElement",
+    "PlacePrediction",
     "geocode_address",
+    "fetch_place_autocomplete",
     "fetch_nearby_places",
     "fetch_place_details",
     "compute_route_duration",
