@@ -30,6 +30,8 @@ ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
     'diphthongic-unluxuriantly-elle.ngrok-free.dev',
+    '18.194.229.54',
+    '*',
 ]
 
 
@@ -104,6 +106,7 @@ DATABASES = {
         'PORT': config('DB_PORT', default='5432'),
     }
 }
+
 
 # CORS 설정
 CORS_ALLOWED_ORIGINS = FRONTEND_ORIGINS
