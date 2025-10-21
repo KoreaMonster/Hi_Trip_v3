@@ -1,62 +1,180 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ChevronDown, HeartPulse, MapPin, ShieldCheck, WifiOff } from 'lucide-react';
-import { useHealthQuery, useMonitoringAlertsQuery, useMonitoringLatestQuery, useTripsQuery } from '@/lib/queryHooks';
-import type { MonitoringAlert, ParticipantLatest } from '@/types/api';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  AlertTriangle,
+  ChevronDown,
+  HeartPulse,
+  MapPin,
+  Search,
+  ShieldCheck,
+  Stethoscope,
+} from 'lucide-react';
+import {
+  useHealthQuery,
+  useMonitoringAlertsQuery,
+  useMonitoringLatestQuery,
+  useParticipantsQuery,
+  useTripsQuery,
+} from '@/lib/queryHooks';
+import type { MonitoringAlert, ParticipantLatest, TripParticipant } from '@/types/api';
 
-const monitoringTone: Record<'normal' | 'warning' | 'critical' | 'offline', string> = {
-  normal: 'bg-emerald-500/10 text-emerald-600 border border-emerald-200',
-  warning: 'bg-amber-500/10 text-amber-600 border border-amber-200',
-  critical: 'bg-rose-500/10 text-rose-600 border border-rose-200',
-  offline: 'bg-slate-200 text-slate-500 border border-slate-200',
+type RiskLevel = 'normal' | 'warning' | 'critical' | 'offline';
+
+const riskTone: Record<RiskLevel, string> = {
+  normal: 'bg-emerald-50 text-emerald-600 border-emerald-200',
+  warning: 'bg-amber-50 text-amber-600 border-amber-200',
+  critical: 'bg-rose-50 text-rose-600 border-rose-200',
+  offline: 'bg-slate-100 text-slate-500 border-slate-200',
+};
+
+const riskLabel: Record<RiskLevel, string> = {
+  normal: '정상',
+  warning: '주의',
+  critical: '위험',
+  offline: '연결 대기',
+};
+
+type ParticipantRow = {
+  participant: TripParticipant;
+  snapshot: ParticipantLatest | null;
+  alerts: MonitoringAlert[];
+  level: RiskLevel;
 };
 
 export default function MonitoringPage() {
   const { data: trips = [] } = useTripsQuery();
   const [selectedTripId, setSelectedTripId] = useState<number | null>(null);
+  const [keyword, setKeyword] = useState('');
 
   useEffect(() => {
     if (trips.length > 0 && selectedTripId === null) {
       setSelectedTripId(trips[0].id);
     }
-  }, [trips, selectedTripId]);
+  }, [selectedTripId, trips]);
 
+  const alertsQueryEnabled = typeof selectedTripId === 'number';
   const { data: alerts = [], isLoading: alertsLoading } = useMonitoringAlertsQuery(selectedTripId ?? undefined, {
-    enabled: typeof selectedTripId === 'number',
+    enabled: alertsQueryEnabled,
   });
   const { data: latest = [], isLoading: latestLoading } = useMonitoringLatestQuery(selectedTripId ?? undefined, {
-    enabled: typeof selectedTripId === 'number',
+    enabled: alertsQueryEnabled,
   });
+  const { data: participants = [], isLoading: participantsLoading } = useParticipantsQuery(
+    selectedTripId ?? undefined,
+    {
+      enabled: alertsQueryEnabled,
+    },
+  );
   const { data: health } = useHealthQuery();
 
-  const level = useMemo<'normal' | 'warning' | 'critical' | 'offline'>(() => {
-    if (!selectedTripId) return 'offline';
-    if (alerts.length === 0 && latest.length === 0) return 'warning';
-    if (alerts.some((alert) => alert.alert_type === 'health')) return 'critical';
-    if (alerts.length > 0) return 'warning';
-    return 'normal';
-  }, [alerts, latest, selectedTripId]);
+  const latestByParticipant = useMemo(() => {
+    const map = new Map<number, ParticipantLatest>();
+    latest.forEach((item) => {
+      map.set(item.participant_id, item);
+    });
+    return map;
+  }, [latest]);
 
-  const participantsAtRisk = useMemo(
-    () =>
-      latest.filter((item) => {
-        const status = item.health?.status;
-        return status && status !== 'normal';
-      }),
-    [latest],
+  const alertsByParticipant = useMemo(() => {
+    const map = new Map<number, MonitoringAlert[]>();
+    alerts.forEach((alert) => {
+      const current = map.get(alert.participant) ?? [];
+      current.push(alert);
+      map.set(alert.participant, current);
+    });
+    return map;
+  }, [alerts]);
+
+  const determineRisk = useCallback(
+    (snapshot: ParticipantLatest | null, participantAlerts: MonitoringAlert[]): RiskLevel => {
+      if (!snapshot) {
+        return participantAlerts.length > 0 ? 'warning' : 'offline';
+      }
+
+      if (participantAlerts.some((alert) => alert.alert_type === 'health')) {
+        return 'critical';
+      }
+
+      const status = snapshot.health?.status?.toLowerCase();
+      if (!status) {
+        return participantAlerts.length > 0 ? 'warning' : 'normal';
+      }
+      if (status.includes('critical') || status.includes('danger') || status.includes('위험')) {
+        return 'critical';
+      }
+      if (status.includes('warning') || status.includes('caution') || status.includes('주의')) {
+        return 'warning';
+      }
+      return participantAlerts.length > 0 ? 'warning' : 'normal';
+    },
+    [],
   );
 
-  const lastAlert = alerts[0];
+  const participantRows = useMemo<ParticipantRow[]>(() => {
+    return participants.map((participant) => {
+      const snapshot = latestByParticipant.get(participant.id) ?? null;
+      const participantAlerts = alertsByParticipant.get(participant.id) ?? [];
+      const level = determineRisk(snapshot, participantAlerts);
+      return { participant, snapshot, alerts: participantAlerts, level };
+    });
+  }, [alertsByParticipant, determineRisk, latestByParticipant, participants]);
+
+  const filteredRows = useMemo(() => {
+    const normalized = keyword.trim().toLowerCase();
+    if (normalized.length === 0) {
+      return participantRows;
+    }
+    return participantRows.filter((row) => {
+      const { traveler } = row.participant;
+      return [traveler.full_name_kr, traveler.phone, traveler.email]
+        .filter((value): value is string => typeof value === 'string' && value.length > 0)
+        .some((value) => value.toLowerCase().includes(normalized));
+    });
+  }, [keyword, participantRows]);
+
+  const sortedRows = useMemo(() => {
+    const levelPriority: Record<RiskLevel, number> = { critical: 0, warning: 1, normal: 2, offline: 3 };
+    return [...filteredRows].sort((a, b) => {
+      const levelDiff = levelPriority[a.level] - levelPriority[b.level];
+      if (levelDiff !== 0) return levelDiff;
+      return a.participant.traveler.full_name_kr.localeCompare(b.participant.traveler.full_name_kr);
+    });
+  }, [filteredRows]);
+
+  const totalCritical = useMemo(
+    () => participantRows.filter((row) => row.level === 'critical').length,
+    [participantRows],
+  );
+  const totalWarning = useMemo(
+    () => participantRows.filter((row) => row.level === 'warning').length,
+    [participantRows],
+  );
+  const totalOffline = useMemo(
+    () => participantRows.filter((row) => row.level === 'offline').length,
+    [participantRows],
+  );
+
+  const overallLevel: RiskLevel = useMemo(() => {
+    if (participantRows.length === 0) {
+      return 'offline';
+    }
+    if (totalCritical > 0) return 'critical';
+    if (totalWarning > 0) return 'warning';
+    if (totalOffline === participantRows.length) return 'offline';
+    return 'normal';
+  }, [participantRows.length, totalCritical, totalWarning, totalOffline]);
+
+  const participantsLoadingState = participantsLoading || selectedTripId === null;
 
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">실시간 모니터링</p>
-            <h1 className="mt-1 text-2xl font-bold text-slate-900">안전 현황 센터</h1>
-            <p className="mt-1 text-sm text-slate-500">참가자 건강과 위치 상태를 실시간으로 확인하고 빠르게 대응하세요.</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">여행 중 관리</p>
+            <h1 className="mt-1 text-2xl font-bold text-slate-900">고객 모니터링 센터</h1>
+            <p className="mt-1 text-sm text-slate-500">생체 데이터와 경보 내역을 확인하고 위험 상황을 빠르게 대응하세요.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative">
@@ -81,43 +199,136 @@ export default function MonitoringPage() {
         </div>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <MonitoringSummary
-            icon={ShieldCheck}
+          <SummaryCard
+            icon={Stethoscope}
             label="전체 상태"
-            value={levelLabel(level)}
-            helper={health?.message ?? '상태 정보를 불러오는 중입니다.'}
-            tone={monitoringTone[level]}
+            value={riskLabel[overallLevel]}
+            helper={health?.message ?? '서비스 상태 확인 중'}
+            tone={riskTone[overallLevel]}
           />
-          <MonitoringSummary
+          <SummaryCard
             icon={AlertTriangle}
-            label="경보"
+            label="누적 경보"
             value={`${alerts.length}건`}
-            helper={lastAlert ? `${lastAlert.traveler_name} · ${formatTime(lastAlert.snapshot_time)}` : '최근 경보 없음'}
-            tone={alerts.length > 0 ? monitoringTone.warning : monitoringTone.normal}
+            helper={alerts[0] ? `${alerts[0].traveler_name} · ${formatAlertTime(alerts[0].snapshot_time)}` : '최근 경보 없음'}
+            tone={alerts.length > 0 ? riskTone.warning : riskTone.normal}
           />
-          <MonitoringSummary
+          <SummaryCard
             icon={HeartPulse}
-            label="건강 주의"
-            value={`${participantsAtRisk.length}명`}
-            helper={participantsAtRisk[0]?.traveler_name ?? '모든 인원이 정상입니다.'}
-            tone={participantsAtRisk.length > 0 ? monitoringTone.warning : monitoringTone.normal}
+            label="위험 고객"
+            value={`${totalCritical}명`}
+            helper={totalWarning > 0 ? `주의 ${totalWarning}명 포함` : '건강 이상 없음'}
+            tone={totalCritical > 0 ? riskTone.critical : totalWarning > 0 ? riskTone.warning : riskTone.normal}
           />
-          <MonitoringSummary
+          <SummaryCard
             icon={MapPin}
-            label="위치 이상"
-            value={`${alerts.filter((alert) => alert.alert_type === 'location').length}건`}
-            helper="지오펜스 이탈"
-            tone={alerts.some((alert) => alert.alert_type === 'location') ? monitoringTone.warning : monitoringTone.normal}
+            label="오프라인"
+            value={`${totalOffline}명`}
+            helper="기기 연결 상태를 확인하세요"
+            tone={totalOffline > 0 ? riskTone.offline : riskTone.normal}
           />
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.5fr_1fr]">
-        <article className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="grid gap-6 xl:grid-cols-[1.8fr_1.2fr]">
+        <article className="space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">신청자 현황</h2>
+              <p className="text-sm text-slate-500">여행 중 고객 건강 상태와 경보 여부를 한눈에 확인하세요.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-500 shadow-sm">
+                <Search className="h-4 w-4 text-primary-500" />
+                <input
+                  value={keyword}
+                  onChange={(event) => setKeyword(event.target.value)}
+                  placeholder="이름, 연락처 검색"
+                  className="w-40 border-none bg-transparent placeholder:text-slate-400 focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-100 text-sm">
+              <thead className="bg-[#F7F9FC] text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold">이름</th>
+                  <th className="px-4 py-3 text-left font-semibold">성별</th>
+                  <th className="px-4 py-3 text-left font-semibold">생년월일</th>
+                  <th className="px-4 py-3 text-left font-semibold">연락처</th>
+                  <th className="px-4 py-3 text-left font-semibold">이메일</th>
+                  <th className="px-4 py-3 text-left font-semibold">위험 여부</th>
+                  <th className="px-4 py-3 text-left font-semibold">심박수</th>
+                  <th className="px-4 py-3 text-left font-semibold">산소포화도</th>
+                  <th className="px-4 py-3 text-right font-semibold">경보</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {(participantsLoadingState || latestLoading) && (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-500">
+                      데이터를 불러오는 중입니다.
+                    </td>
+                  </tr>
+                )}
+                {!participantsLoadingState && !latestLoading && sortedRows.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-500">
+                      조회된 참가자 정보가 없습니다.
+                    </td>
+                  </tr>
+                )}
+                {sortedRows.map((row) => {
+                  const { participant, snapshot, alerts: participantAlerts, level } = row;
+                  const traveler = participant.traveler;
+                  const birthDateValue = traveler.birth_date ? new Date(traveler.birth_date) : null;
+                  const birthDate =
+                    birthDateValue && !Number.isNaN(birthDateValue.getTime())
+                      ? birthDateValue.toLocaleDateString('ko-KR')
+                      : '-';
+                  const heartRateValue = snapshot?.health?.heart_rate;
+                  const spo2Value = snapshot?.health?.spo2 ?? null;
+                  const heartRate = typeof heartRateValue === 'number' ? `${heartRateValue} bpm` : '-';
+                  const spo2 = typeof spo2Value === 'string' && spo2Value.length > 0 ? `${spo2Value}%` : '-';
+                  return (
+                    <tr
+                      key={participant.id}
+                      className={`transition hover:bg-slate-50/70 ${
+                        level === 'critical'
+                          ? 'bg-rose-50'
+                          : level === 'warning'
+                          ? 'bg-amber-50/40'
+                          : level === 'offline'
+                          ? 'bg-slate-50'
+                          : ''
+                      }`}
+                    >
+                      <td className="px-4 py-3 font-semibold text-slate-900">{traveler.full_name_kr}</td>
+                      <td className="px-4 py-3 text-slate-600">{genderLabel(traveler.gender)}</td>
+                      <td className="px-4 py-3 text-slate-600">{birthDate}</td>
+                      <td className="px-4 py-3 text-slate-600">{traveler.phone}</td>
+                      <td className="px-4 py-3 text-slate-600">{traveler.email}</td>
+                      <td className="px-4 py-3">
+                        <RiskBadge level={level} alerts={participantAlerts.length} />
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">{heartRate}</td>
+                      <td className="px-4 py-3 text-slate-700">{spo2}</td>
+                      <td className="px-4 py-3 text-right text-slate-600">{participantAlerts.length}건</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <aside className="space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">경보 타임라인</h2>
-              <p className="text-sm text-slate-500">발생 시간과 내용을 확인하고 담당자에게 알림을 전달하세요.</p>
+              <p className="text-sm text-slate-500">최근 발생한 경보를 확인하고 대응을 기록하세요.</p>
             </div>
             <span className="rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">최근 24시간</span>
           </div>
@@ -133,27 +344,7 @@ export default function MonitoringPage() {
               </div>
             )}
             {alerts.map((alert) => (
-              <AlertCard key={alert.id} alert={alert} />
-            ))}
-          </div>
-        </article>
-
-        <aside className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">실시간 상태</h2>
-          <p className="text-sm text-slate-500">참가자별 최신 건강/위치 데이터를 요약합니다.</p>
-          <div className="space-y-3">
-            {latestLoading && (
-              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                최신 상태를 불러오는 중입니다.
-              </div>
-            )}
-            {!latestLoading && latest.length === 0 && (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                아직 수집된 측정 데이터가 없습니다.
-              </div>
-            )}
-            {latest.map((item) => (
-              <ParticipantStatus key={item.participant_id} snapshot={item} />
+              <AlertListItem key={alert.id} alert={alert} />
             ))}
           </div>
         </aside>
@@ -162,28 +353,21 @@ export default function MonitoringPage() {
   );
 }
 
-function levelLabel(level: 'normal' | 'warning' | 'critical' | 'offline') {
-  switch (level) {
-    case 'critical':
-      return '위험';
-    case 'warning':
-      return '주의';
-    case 'offline':
-      return '연결 대기';
-    default:
-      return '정상';
-  }
+function genderLabel(gender: TripParticipant['traveler']['gender']) {
+  if (gender === 'M') return '남성';
+  if (gender === 'F') return '여성';
+  return '미확인';
 }
 
-function formatTime(value: string) {
+function formatAlertTime(value: string) {
   const date = new Date(value);
-  return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date
-    .getMinutes()
+  return `${date.getMonth() + 1}/${date.getDate()} ${date
+    .getHours()
     .toString()
-    .padStart(2, '0')}`;
+    .padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
 }
 
-function MonitoringSummary({
+function SummaryCard({
   icon: Icon,
   label,
   value,
@@ -208,58 +392,36 @@ function MonitoringSummary({
   );
 }
 
-function AlertCard({ alert }: { alert: MonitoringAlert }) {
+function RiskBadge({ level, alerts }: { level: RiskLevel; alerts: number }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${riskTone[level]}`}
+    >
+      {riskLabel[level]}
+      {alerts > 0 && <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-700">{alerts}</span>}
+    </span>
+  );
+}
+
+function AlertListItem({ alert }: { alert: MonitoringAlert }) {
   const tone =
     alert.alert_type === 'health'
-      ? 'border-rose-200 bg-rose-50 text-rose-700'
-      : 'border-amber-200 bg-amber-50 text-amber-700';
+      ? 'border-rose-200 bg-rose-50 text-rose-600'
+      : 'border-amber-200 bg-amber-50 text-amber-600';
   const icon = alert.alert_type === 'health' ? <HeartPulse className="h-4 w-4" /> : <MapPin className="h-4 w-4" />;
   return (
     <div className={`flex items-center justify-between rounded-2xl border px-4 py-3 ${tone}`}>
       <div className="flex items-center gap-3">
-        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/70 text-slate-700 shadow-sm">{icon}</span>
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/70 text-slate-700 shadow-sm">
+          {icon}
+        </span>
         <div>
           <p className="text-sm font-semibold text-slate-800">{alert.traveler_name}</p>
           <p className="text-xs text-slate-600">{alert.message}</p>
-          <p className="text-xs text-slate-400">{formatTime(alert.snapshot_time)}</p>
+          <p className="text-xs text-slate-400">{formatAlertTime(alert.snapshot_time)}</p>
         </div>
       </div>
       <span className="text-xs font-semibold text-slate-700">Trip #{alert.trip_id}</span>
-    </div>
-  );
-}
-
-function ParticipantStatus({ snapshot }: { snapshot: ParticipantLatest }) {
-  const status = snapshot.health?.status ?? 'unknown';
-  const isOffline = !snapshot.location;
-  const tone =
-    status === 'normal'
-      ? 'bg-emerald-50 border border-emerald-200 text-emerald-600'
-      : status === 'caution' || status === 'warning'
-      ? 'bg-amber-50 border border-amber-200 text-amber-600'
-      : status === 'danger' || status === 'critical'
-      ? 'bg-rose-50 border border-rose-200 text-rose-600'
-      : 'bg-slate-100 border border-slate-200 text-slate-500';
-  return (
-    <div className={`rounded-2xl border px-4 py-4 ${tone}`}>
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-slate-800">{snapshot.traveler_name}</p>
-        <span className="text-xs font-semibold text-slate-600">
-          {isOffline ? (
-            <span className="inline-flex items-center gap-1 text-slate-500">
-              <WifiOff className="h-3.5 w-3.5" /> 오프라인
-            </span>
-          ) : (
-            '실시간'
-          )}
-        </span>
-      </div>
-      <p className="mt-2 text-xs text-slate-600">
-        심박수 {snapshot.health?.heart_rate ?? '-'} bpm · 산소포화도 {snapshot.health?.spo2 ?? '-'}%
-      </p>
-      <p className="mt-1 text-xs text-slate-500">
-        위치 {snapshot.location ? `${snapshot.location.latitude}, ${snapshot.location.longitude}` : '정보 없음'}
-      </p>
     </div>
   );
 }
