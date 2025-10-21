@@ -62,6 +62,22 @@ export type ParticipantLatest = {
   location: LocationSnapshot | null;
 };
 
+export type ParticipantHistory = {
+  participant_id: number;
+  traveler_name: string;
+  trip_id: number;
+  last_updated: string | null;
+  health: HealthSnapshot[];
+  location: LocationSnapshot[];
+};
+
+export type MonitoringDemoResponse = {
+  created: number;
+  minutes: number;
+  interval: number;
+  participants: number;
+};
+
 // ─── Trips ────────────────────────────────────────────────────────────────────
 export type TripStatus = 'planning' | 'ongoing' | 'completed';
 

@@ -4,6 +4,8 @@ import type {
   LoginRequest,
   LoginResponse,
   MonitoringAlert,
+  MonitoringDemoResponse,
+  ParticipantHistory,
   ParticipantLatest,
   Place,
   PlaceCategory,
@@ -79,6 +81,41 @@ export const getMonitoringTripLatest = async (
   tripId: number | string,
 ): Promise<ParticipantLatest[]> =>
   apiRequest(() => apiClient.get(`api/monitoring/trips/${tripId}/latest/`).json<ParticipantLatest[]>());
+
+type MonitoringHistoryParams = { limit?: number };
+
+export const getMonitoringParticipantHistory = async (
+  tripId: number | string,
+  participantId: number | string,
+  params?: MonitoringHistoryParams,
+): Promise<ParticipantHistory> =>
+  apiRequest(() =>
+    apiClient
+      .get(`api/monitoring/trips/${tripId}/participants/${participantId}/history/`, {
+        searchParams: params
+          ? Object.fromEntries(
+              Object.entries(params)
+                .filter(([, value]) => value !== undefined && value !== null)
+                .map(([key, value]) => [key, String(value)]),
+            )
+          : undefined,
+      })
+      .json<ParticipantHistory>(),
+  );
+
+type MonitoringDemoRequest = { minutes?: number; interval?: number };
+
+export const postMonitoringGenerateDemo = async (
+  tripId: number | string,
+  body?: MonitoringDemoRequest,
+): Promise<MonitoringDemoResponse> =>
+  apiRequest(() =>
+    apiClient
+      .post(`api/monitoring/trips/${tripId}/generate-demo/`, {
+        json: body ?? {},
+      })
+      .json<MonitoringDemoResponse>(),
+  );
 
 export const postLogin = async (body: LoginRequest): Promise<LoginResponse> =>
   apiRequest(() => apiClient.post('api/auth/login/', { json: body }).json<LoginResponse>());

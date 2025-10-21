@@ -4,6 +4,7 @@ import { useQuery, type QueryKey, type UseQueryOptions } from '@tanstack/react-q
 import {
   getHealth,
   getMonitoringTripAlerts,
+  getMonitoringParticipantHistory,
   getMonitoringTripLatest,
   getProfile,
   getTripDetail,
@@ -18,6 +19,7 @@ import {
 import type {
   HealthResponse,
   MonitoringAlert,
+  ParticipantHistory,
   ParticipantLatest,
   Place,
   PlaceCategory,
@@ -86,6 +88,21 @@ export const useMonitoringLatestQuery = (
     queryFn: () => getMonitoringTripLatest(tripId!),
     enabled: typeof tripId === 'number',
     refetchInterval: 1000 * 60,
+    ...options,
+  });
+
+export const useMonitoringParticipantHistoryQuery = (
+  tripId?: number,
+  participantId?: number,
+  params?: { limit?: number },
+  options?: BaseOptions<ParticipantHistory>,
+) =>
+  useQuery({
+    queryKey: ['monitoring', 'history', tripId, participantId, params],
+    queryFn: () => getMonitoringParticipantHistory(tripId!, participantId!, params),
+    enabled: typeof tripId === 'number' && typeof participantId === 'number',
+    refetchInterval: 1000 * 15,
+    staleTime: 0,
     ...options,
   });
 
