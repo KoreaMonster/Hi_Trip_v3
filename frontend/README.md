@@ -2,23 +2,21 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-First, run the development server:
+### 환경 변수 설정
+
+프런트엔드는 Django 백엔드와 통신하기 위해 `NEXT_PUBLIC_API_BASE_URL` 환경 변수를 사용합니다. 개발 환경에서는 해당 변수를 지정하지 않으면 자동으로 `http://localhost:8000`을 사용합니다. 배포 환경에서는 반드시 올바른 백엔드 주소를 `.env.local`에 설정해 주세요.
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=https://your-backend.example.com
+```
+
+### 개발 서버 실행
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+브라우저에서 [http://localhost:3000](http://localhost:3000)에 접속하면 앱을 확인할 수 있습니다.
 
 ## Learn More
 

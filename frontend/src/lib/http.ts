@@ -17,18 +17,27 @@ export class ApiError extends Error {
   }
 }
 
-const resolveBaseUrl = (): string | undefined => {
+const resolveBaseUrl = (): string => {
   const globalProcess = (globalThis as unknown as {
     process?: { env?: Record<string, string | undefined> };
   }).process;
 
-  return globalProcess?.env?.NEXT_PUBLIC_API_BASE_URL;
+  const envUrl = globalProcess?.env?.NEXT_PUBLIC_API_BASE_URL;
+  if (envUrl && envUrl.trim().length > 0) {
+    return envUrl;
+  }
+
+  if (process.env.NODE_ENV === 'development') {
+    return 'http://localhost:8000';
+  }
+
+  return '';
 };
 
-const baseUrl = resolveBaseUrl()?.replace(/\/$/, '');
+const normalizedBaseUrl = resolveBaseUrl().replace(/\/$/, '');
 
 export const apiClient = ky.create({
-  prefixUrl: baseUrl && baseUrl.length > 0 ? `${baseUrl}/` : undefined,
+  prefixUrl: normalizedBaseUrl.length > 0 ? `${normalizedBaseUrl}/` : undefined,
   credentials: 'include',
   timeout: 15000,
   headers: {
