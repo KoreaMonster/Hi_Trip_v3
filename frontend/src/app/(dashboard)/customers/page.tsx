@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarCheck2, ChevronDown, Crown, Mail, PhoneCall, UserRound } from 'lucide-react';
+import { ArrowUpRight, CalendarCheck2, ChevronDown, Crown, Mail, PhoneCall, UserRound } from 'lucide-react';
 import { useParticipantsQuery, useSchedulesQuery } from '@/lib/queryHooks';
 import { useScopedTrips } from '@/lib/useScopedTrips';
 import type { Schedule, Trip } from '@/types/api';
@@ -149,19 +149,20 @@ export default function CustomersPage() {
                   <th className="px-5 py-3 text-left font-semibold">연락처</th>
                   <th className="px-5 py-3 text-left font-semibold">이메일</th>
                   <th className="px-5 py-3 text-left font-semibold">응답 상태</th>
+                  <th className="px-5 py-3 text-right font-semibold">상세</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {isLoading && (
                   <tr>
-                    <td colSpan={4} className="px-5 py-6 text-center text-sm text-slate-500">
+                    <td colSpan={5} className="px-5 py-6 text-center text-sm text-slate-500">
                       고객 정보를 불러오는 중입니다.
                     </td>
                   </tr>
                 )}
                 {!isLoading && participants.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-5 py-6 text-center text-sm text-slate-500">
+                    <td colSpan={5} className="px-5 py-6 text-center text-sm text-slate-500">
                       {selectedTrip ? '아직 고객 정보가 없습니다.' : noTripMessage}
                     </td>
                   </tr>
@@ -194,7 +195,16 @@ export default function CustomersPage() {
                           }`}
                         >
                           {isRecent ? '상담 예약' : '응답 완료'}
-                      </span>
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-right">
+                        <Link
+                          href={href}
+                          className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-primary-200 hover:text-primary-600"
+                        >
+                          상세 보기
+                          <ArrowUpRight className="h-3.5 w-3.5" />
+                        </Link>
                       </td>
                     </tr>
                 );

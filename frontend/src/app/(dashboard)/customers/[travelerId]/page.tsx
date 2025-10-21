@@ -5,7 +5,9 @@ import { useMemo, type ReactNode } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
+  ArrowUpRight,
   CalendarCheck2,
+  CalendarClock,
   CheckCircle2,
   CreditCard,
   Home,
@@ -19,8 +21,8 @@ import {
   XCircle,
 } from 'lucide-react';
 
-import { useTravelerDetailQuery, useTripDetailQuery } from '@/lib/queryHooks';
-import type { TripParticipant } from '@/types/api';
+import { useSchedulesQuery, useTravelerDetailQuery, useTripDetailQuery } from '@/lib/queryHooks';
+import type { Schedule, TripParticipant } from '@/types/api';
 
 const formatCurrency = (value: number) => `${value.toLocaleString('ko-KR')}원`;
 
@@ -39,6 +41,12 @@ const parseOptionalNumber = (value: string | null): number | undefined => {
   return Number.isNaN(parsed) ? undefined : parsed;
 };
 
+const formatScheduleTimeRange = (schedule: Schedule) => {
+  const start = schedule.start_time.slice(0, 5);
+  const end = schedule.end_time.slice(0, 5);
+  return `${start} ~ ${end}`;
+};
+
 export default function CustomerDetailPage() {
   const params = useParams<{ travelerId: string }>();
   const searchParams = useSearchParams();
@@ -52,11 +60,28 @@ export default function CustomerDetailPage() {
 
   const { data: traveler, isLoading, isError } = useTravelerDetailQuery(resolvedTravelerId);
   const { data: tripDetail } = useTripDetailQuery(tripId);
+  const { data: tripSchedules = [], isLoading: isTripSchedulesLoading } = useSchedulesQuery(tripId, {
+    enabled: typeof tripId === 'number',
+  });
 
   const participant: TripParticipant | undefined = useMemo(() => {
     if (!tripDetail || typeof participantId !== 'number') return undefined;
     return tripDetail.participants.find((item) => item.id === participantId);
   }, [tripDetail, participantId]);
+
+  const highlightedSchedules = useMemo(() => {
+    if (!tripSchedules || tripSchedules.length === 0) return [] as Schedule[];
+    return [...tripSchedules]
+      .sort((a, b) => {
+        if (a.day_number === b.day_number) {
+          return a.start_time.localeCompare(b.start_time);
+        }
+        return a.day_number - b.day_number;
+      })
+      .slice(0, 5);
+  }, [tripSchedules]);
+
+  const schedulePageHref = typeof tripId === 'number' ? `/schedules?trip=${tripId}` : '/schedules';
 
   if (!resolvedTravelerId) {
     return (
@@ -170,6 +195,65 @@ export default function CustomerDetailPage() {
               ))}
             </ul>
           </div>
+
+          <SectionTitle
+            icon={<CalendarClock className="h-4 w-4 text-primary-500" />}
+            title="참여 일정 요약"
+            description="선택한 여행에서 진행 예정인 일정을 확인하세요."
+          />
+
+          <div className="space-y-3 rounded-2xl border border-slate-100 bg-white px-5 py-4">
+            {typeof tripId !== 'number' ? (
+              <p className="text-sm text-slate-500">연결된 여행 정보를 찾을 수 없어 일정을 불러오지 못했습니다.</p>
+            ) : isTripSchedulesLoading ? (
+              <p className="text-sm text-slate-500">일정을 불러오는 중입니다.</p>
+            ) : highlightedSchedules.length > 0 ? (
+              <ul className="space-y-3 text-sm text-slate-600">
+                {highlightedSchedules.map((schedule) => (
+                  <li key={schedule.id} className="flex flex-col gap-1 rounded-xl border border-slate-100 bg-[#F9FBFF] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {schedule.day_number}일차 · {formatScheduleTimeRange(schedule)}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {schedule.main_content ?? schedule.place_name ?? '세부 일정 미정'}
+                      </p>
+                      {schedule.meeting_point && (
+                        <p className="text-xs text-slate-400">집결지: {schedule.meeting_point}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-end gap-2">
+                      {schedule.place_id ? (
+                        <Link
+                          href={`/places/${schedule.place_id}`}
+                          className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-primary-200 hover:text-primary-600"
+                        >
+                          장소 상세
+                          <ArrowUpRight className="h-3.5 w-3.5" />
+                        </Link>
+                      ) : (
+                        <span className="text-xs text-slate-400">연결된 장소 없음</span>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-slate-500">등록된 일정이 없습니다.</p>
+            )}
+          </div>
+
+          {typeof tripId === 'number' && (
+            <div className="flex justify-end">
+              <Link
+                href={schedulePageHref}
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600"
+              >
+                전체 타임라인 보기
+                <ArrowUpRight className="h-4 w-4" />
+              </Link>
+            </div>
+          )}
         </section>
 
         <aside className="space-y-5">
