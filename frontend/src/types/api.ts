@@ -63,13 +63,15 @@ export type ParticipantLatest = {
 };
 
 // ─── Trips ────────────────────────────────────────────────────────────────────
+export type TripStatus = 'planning' | 'ongoing' | 'completed';
+
 export type Trip = {
   id: number;
   title: string;
   destination: string;
   start_date: string;
   end_date: string;
-  status: 'planning' | 'ongoing' | 'completed';
+  status: TripStatus;
   invite_code?: string;
   manager?: number | null;
   manager_name?: string | null;
@@ -81,7 +83,18 @@ export type TripCreate = {
   destination: string;
   start_date: string;
   end_date: string;
-  status?: 'planning' | 'ongoing' | 'completed';
+};
+
+export type TripDetail = Trip & {
+  invite_code: string;
+  participant_count: number;
+  heart_rate_min: number | null;
+  heart_rate_max: number | null;
+  spo2_min: string | null;
+  geofence_center_lat: string | null;
+  geofence_center_lng: string | null;
+  geofence_radius_km: string | null;
+  participants: TripParticipant[];
 };
 
 export type Traveler = {

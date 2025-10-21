@@ -6,6 +6,7 @@ import {
   getMonitoringTripAlerts,
   getMonitoringTripLatest,
   getProfile,
+  getTripDetail,
   listCategories,
   listParticipants,
   listPendingStaff,
@@ -23,6 +24,7 @@ import type {
   ProfileResponse,
   Schedule,
   Trip,
+  TripDetail,
   TripParticipant,
   UserDetail,
 } from '@/types/api';
@@ -34,6 +36,15 @@ export const useTripsQuery = (options?: BaseOptions<Trip[]>) =>
     queryKey: ['trips'],
     queryFn: listTrips,
     staleTime: 1000 * 60 * 5,
+    ...options,
+  });
+
+export const useTripDetailQuery = (tripId?: number, options?: BaseOptions<TripDetail>) =>
+  useQuery({
+    queryKey: ['trips', tripId, 'detail'],
+    queryFn: () => getTripDetail(tripId!),
+    enabled: typeof tripId === 'number',
+    staleTime: 1000 * 30,
     ...options,
   });
 

@@ -12,6 +12,7 @@ import type {
   ScheduleCreate,
   Trip,
   TripCreate,
+  TripDetail,
   TripParticipant,
   UserDetail,
 } from '@/types/api';
@@ -20,6 +21,51 @@ const toTripStatus = (value: Trip['status'] | string | undefined): Trip['status'
   if (value === 'ongoing' || value === 'completed') return value;
   return 'planning';
 };
+
+const dateOnly = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate());
+
+const parseDateOnly = (value?: string) => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return dateOnly(parsed);
+};
+
+const deriveTripStatus = (
+  status: Trip['status'] | string | undefined,
+  startDate?: string,
+  endDate?: string,
+): Trip['status'] => {
+  const fallback = toTripStatus(status);
+  const start = parseDateOnly(startDate);
+  const end = parseDateOnly(endDate);
+
+  if (!start || !end) {
+    return fallback;
+  }
+
+  const today = dateOnly(new Date());
+  if (today < start) {
+    return 'planning';
+  }
+  if (today > end) {
+    return 'completed';
+  }
+  return 'ongoing';
+};
+
+const normalizeTrip = (trip: Trip): Trip => ({
+  ...trip,
+  status: deriveTripStatus(trip.status, trip.start_date, trip.end_date),
+});
+
+const normalizeTripDetail = (trip: TripDetail): TripDetail => ({
+  ...trip,
+  status: deriveTripStatus(trip.status, trip.start_date, trip.end_date),
+  participants: trip.participants ?? [],
+});
 
 export const getHealth = async (): Promise<HealthResponse> =>
   apiRequest(() => apiClient.get('api/health/').json<HealthResponse>());
@@ -48,20 +94,13 @@ export const getProfile = async (): Promise<ProfileResponse> =>
 export const listTrips = async (): Promise<Trip[]> =>
   apiRequest(async () => {
     const trips = await apiClient.get('api/trips/').json<Trip[]>();
-    return trips.map((trip: Trip) => ({
-      ...trip,
-      status: toTripStatus(trip.status),
-    }));
+    return trips.map((trip) => normalizeTrip(trip));
   });
 
 export const createTrip = async (body: TripCreate): Promise<Trip> =>
   apiRequest(async () => {
-    const payload: TripCreate = {
-      ...body,
-      status: toTripStatus(body.status ?? 'planning'),
-    };
-    const trip = await apiClient.post('api/trips/', { json: payload }).json<Trip>();
-    return { ...trip, status: toTripStatus(trip.status) };
+    const trip = await apiClient.post('api/trips/', { json: body }).json<Trip>();
+    return normalizeTrip(trip);
   });
 
 export const listParticipants = async (tripId: number): Promise<TripParticipant[]> =>
@@ -121,5 +160,11 @@ export const assignTripManager = async (tripId: number, managerId: number): Prom
       .post(`api/trips/${tripId}/assign-manager/`, { json: { manager_id: managerId } })
       .json<Trip>();
 
-    return { ...trip, status: toTripStatus(trip.status) };
+    return normalizeTrip(trip);
+  });
+
+export const getTripDetail = async (tripId: number): Promise<TripDetail> =>
+  apiRequest(async () => {
+    const trip = await apiClient.get(`api/trips/${tripId}/`).json<TripDetail>();
+    return normalizeTripDetail(trip);
   });

@@ -14,7 +14,6 @@ export default function TripsTestPage() {
     destination: '서울',
     start_date: new Date().toISOString().slice(0, 10),
     end_date: new Date(Date.now() + 1000 * 60 * 60 * 24 * 2).toISOString().slice(0, 10),
-    status: 'planning',
   });
   const [tripId, setTripId] = useState<number>(1);
   const [err, setErr] = useState<unknown>(null);
@@ -30,7 +29,7 @@ export default function TripsTestPage() {
   const handleChange = (field: keyof TripCreate) => (value: string) => {
     setForm((prev) => ({
       ...prev,
-      [field]: field === 'status' ? (value as TripCreate['status']) : value,
+      [field]: value,
     }));
   };
 
@@ -94,16 +93,6 @@ export default function TripsTestPage() {
             value={form.end_date}
             onChange={(e) => handleChange('end_date')(e.target.value)}
           />
-          <label className="text-xs uppercase text-slate-500">상태</label>
-          <select
-            className="px-2 py-1 border rounded"
-            value={form.status ?? 'planning'}
-            onChange={(e) => handleChange('status')(e.target.value)}
-          >
-            <option value="planning">planning</option>
-            <option value="ongoing">ongoing</option>
-            <option value="completed">completed</option>
-          </select>
         </div>
 
         <div className="flex items-center gap-2">

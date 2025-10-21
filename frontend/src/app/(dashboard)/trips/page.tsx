@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CalendarRange, Filter, MapPin, Plane, PlusCircle, UserCog, Users2, X } from 'lucide-react';
 import { assignTripManager, createTrip } from '@/lib/api';
 import { useStaffDirectoryQuery, useTripsQuery } from '@/lib/queryHooks';
+import { useUserStore } from '@/stores/useUserStore';
 import type { Trip, TripCreate } from '@/types/api';
 
 type TripFormState = {
@@ -12,7 +13,6 @@ type TripFormState = {
   destination: string;
   start_date: string;
   end_date: string;
-  status: Trip['status'];
 };
 
 const initialTripForm: TripFormState = {
@@ -20,7 +20,6 @@ const initialTripForm: TripFormState = {
   destination: '',
   start_date: '',
   end_date: '',
-  status: 'planning',
 };
 
 const tripStatusMeta: Record<Trip['status'], { label: string; tone: string; chip: string }> = {
@@ -46,6 +45,7 @@ const statusFilters: Array<'all' | Trip['status']> = ['all', 'planning', 'ongoin
 export default function TripsPage() {
   const { data: trips = [], isLoading } = useTripsQuery();
   const queryClient = useQueryClient();
+  const { user } = useUserStore();
   const [filter, setFilter] = useState<(typeof statusFilters)[number]>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [form, setForm] = useState<TripFormState>({ ...initialTripForm });
@@ -54,6 +54,7 @@ export default function TripsPage() {
   const [assignTarget, setAssignTarget] = useState<Trip | null>(null);
   const [assignManagerId, setAssignManagerId] = useState<number | null>(null);
   const [assignError, setAssignError] = useState<string | null>(null);
+  const canManageAssignments = user?.role === 'super_admin';
 
   const createTripMutation = useMutation({
     mutationFn: (payload: TripCreate) => createTrip(payload),
@@ -72,8 +73,8 @@ export default function TripsPage() {
   });
 
   const { data: staffDirectory = [], isLoading: staffLoading } = useStaffDirectoryQuery(
-    assignTarget ? { is_approved: true } : undefined,
-    { enabled: assignTarget !== null },
+    assignTarget && canManageAssignments ? { is_approved: true } : undefined,
+    { enabled: canManageAssignments && assignTarget !== null },
   );
 
   useEffect(() => {
@@ -89,6 +90,14 @@ export default function TripsPage() {
       setAssignManagerId(staffDirectory[0].id);
     }
   }, [assignManagerId, assignTarget, staffDirectory]);
+
+  useEffect(() => {
+    if (!canManageAssignments && assignTarget) {
+      setAssignTarget(null);
+      setAssignManagerId(null);
+      setAssignError(null);
+    }
+  }, [canManageAssignments, assignTarget]);
 
   const assignManagerMutation = useMutation({
     mutationFn: ({ tripId, managerId }: { tripId: number; managerId: number }) =>
@@ -137,7 +146,6 @@ export default function TripsPage() {
       destination: form.destination.trim(),
       start_date: form.start_date,
       end_date: form.end_date,
-      status: form.status,
     };
 
     createTripMutation.mutate(payload);
@@ -158,6 +166,8 @@ export default function TripsPage() {
     if (filter === 'all') return trips;
     return trips.filter((trip) => trip.status === filter);
   }, [filter, trips]);
+
+  const tableColumnCount = canManageAssignments ? 6 : 5;
 
   return (
     <div className="space-y-6">
@@ -256,20 +266,20 @@ export default function TripsPage() {
                 <th className="px-5 py-3 text-left font-semibold">담당자</th>
                 <th className="px-5 py-3 text-left font-semibold">상태</th>
                 <th className="px-5 py-3 text-right font-semibold">참가자</th>
-                <th className="px-5 py-3 text-right font-semibold">관리</th>
+                {canManageAssignments && <th className="px-5 py-3 text-right font-semibold">관리</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {isLoading && (
                 <tr>
-                  <td colSpan={6} className="px-5 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={tableColumnCount} className="px-5 py-6 text-center text-sm text-slate-500">
                     여행 정보를 불러오는 중입니다.
                   </td>
                 </tr>
               )}
               {!isLoading && filteredTrips.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-5 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={tableColumnCount} className="px-5 py-6 text-center text-sm text-slate-500">
                     조건에 해당하는 여행이 없습니다.
                   </td>
                 </tr>
@@ -290,19 +300,21 @@ export default function TripsPage() {
                       </span>
                     </td>
                     <td className="px-5 py-4 text-right text-slate-600">{trip.participant_count ?? 0}명</td>
-                    <td className="px-5 py-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAssignTarget(trip);
-                          setAssignManagerId(trip.manager ?? null);
-                          setAssignError(null);
-                        }}
-                        className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-4 py-2 text-xs font-semibold text-primary-600 shadow-sm transition hover:bg-primary-100"
-                      >
-                        <UserCog className="h-4 w-4" /> 담당자 배정
-                      </button>
-                    </td>
+                    {canManageAssignments && (
+                      <td className="px-5 py-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAssignTarget(trip);
+                            setAssignManagerId(trip.manager ?? null);
+                            setAssignError(null);
+                          }}
+                          className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-4 py-2 text-xs font-semibold text-primary-600 shadow-sm transition hover:bg-primary-100"
+                        >
+                          <UserCog className="h-4 w-4" /> 담당자 배정
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -402,22 +414,6 @@ export default function TripsPage() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label htmlFor="trip-status" className="text-sm font-semibold text-slate-700">
-                  진행 상태
-                </label>
-                <select
-                  id="trip-status"
-                  value={form.status}
-                  onChange={(event) => handleFormChange('status')(event.target.value)}
-                  className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
-                >
-                  <option value="planning">계획 중</option>
-                  <option value="ongoing">진행 중</option>
-                  <option value="completed">완료</option>
-                </select>
-              </div>
-
               <div className="flex justify-end gap-3 pt-2">
                 <button
                   type="button"
@@ -439,7 +435,7 @@ export default function TripsPage() {
         </div>
       )}
 
-      {assignTarget && (
+      {assignTarget && canManageAssignments && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 py-6">
           <div className="w-full max-w-md rounded-3xl border border-slate-100 bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between">
