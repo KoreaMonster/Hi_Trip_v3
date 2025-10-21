@@ -12,13 +12,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .permissions import IsApprovedStaff, IsSuperAdminUser
-from .serializers import LoginSerializer, UserDetailSerializer, UserSerialization
 from .serializers import (
     LoginSerializer,
     LogoutResponseSerializer,
+    TravelerSerializer,
     UserDetailSerializer,
     UserSerialization,
 )
+from users.models import Traveler
 
 User = get_user_model()
 
@@ -183,3 +184,19 @@ class ProfileAPIView(APIView):
     def get(self, request, *args, **kwargs):
         # request.user에는 세션 인증을 거친 사용자 객체가 자동으로 채워집니다.
         return Response(UserDetailSerializer(request.user).data)
+
+
+class TravelerViewSet(viewsets.ReadOnlyModelViewSet):
+    """여행자(고객) 상세 정보를 제공하는 전용 ViewSet."""
+
+    serializer_class = TravelerSerializer
+    permission_classes = [IsAuthenticated, IsApprovedStaff]
+
+    def get_queryset(self):
+        queryset = Traveler.objects.all().order_by("last_name_kr", "first_name_kr")
+
+        user = self.request.user
+        if user.role == "super_admin":
+            return queryset
+
+        return queryset.filter(trips__trip__manager=user).distinct()

@@ -5,8 +5,10 @@ import {
   getHealth,
   getMonitoringTripAlerts,
   getMonitoringTripLatest,
+  getPlace,
   getProfile,
   getTripDetail,
+  getTraveler,
   listCategories,
   listParticipants,
   listPendingStaff,
@@ -23,6 +25,7 @@ import type {
   PlaceCategory,
   ProfileResponse,
   Schedule,
+  Traveler,
   Trip,
   TripDetail,
   TripParticipant,
@@ -109,6 +112,15 @@ export const usePlacesQuery = (options?: BaseOptions<Place[]>) =>
     ...options,
   });
 
+export const usePlaceDetailQuery = (placeId?: number, options?: BaseOptions<Place>) =>
+  useQuery({
+    queryKey: ['places', placeId],
+    queryFn: () => getPlace(placeId!),
+    enabled: typeof placeId === 'number',
+    staleTime: 1000 * 60 * 10,
+    ...options,
+  });
+
 export const useCategoriesQuery = (options?: BaseOptions<PlaceCategory[]>) =>
   useQuery({
     queryKey: ['place-categories'],
@@ -142,5 +154,14 @@ export const useProfileQuery = (options?: BaseOptions<ProfileResponse>) =>
     queryFn: getProfile,
     staleTime: 1000 * 30,
     retry: false,
+    ...options,
+  });
+
+export const useTravelerQuery = (travelerId?: number, options?: BaseOptions<Traveler>) =>
+  useQuery({
+    queryKey: ['travelers', travelerId],
+    queryFn: () => getTraveler(travelerId!),
+    enabled: typeof travelerId === 'number',
+    staleTime: 1000 * 60,
     ...options,
   });

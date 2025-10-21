@@ -1,5 +1,6 @@
 'use client';
-
+ 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarCheck2, ChevronDown, Crown, Mail, PhoneCall, UserRound } from 'lucide-react';
 import { useParticipantsQuery, useSchedulesQuery } from '@/lib/queryHooks';
@@ -172,7 +173,16 @@ export default function CustomersPage() {
                   const isRecent = daysSinceJoin <= 7;
                   return (
                     <tr key={participant.id} className="transition hover:bg-slate-50/70">
-                      <td className="px-5 py-4 font-semibold text-slate-800">{participant.traveler.full_name_kr}</td>
+                      <td className="px-5 py-4 font-semibold text-slate-800">
+                        <Link
+                          href={`/customers/${participant.traveler.id}${
+                            selectedTripId ? `?tripId=${selectedTripId}` : ''
+                          }`}
+                          className="text-primary-600 transition hover:text-primary-700"
+                        >
+                          {participant.traveler.full_name_kr}
+                        </Link>
+                      </td>
                       <td className="px-5 py-4 text-slate-600">{participant.traveler.phone}</td>
                       <td className="px-5 py-4 text-slate-600">{participant.traveler.email}</td>
                       <td className="px-5 py-4 text-slate-600">

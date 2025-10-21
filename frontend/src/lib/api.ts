@@ -14,6 +14,7 @@ import type {
   TripCreate,
   TripDetail,
   TripParticipant,
+  Traveler,
   UserCreate,
   UserDetail,
 } from '@/types/api';
@@ -144,6 +145,9 @@ export const listStaff = async (params?: { is_approved?: boolean }): Promise<Use
       .json<UserDetail[]>();
   });
 
+export const getTraveler = async (travelerId: number): Promise<Traveler> =>
+  apiRequest(() => apiClient.get(`api/auth/travelers/${travelerId}/`).json<Traveler>());
+
 export const approveStaff = async (staffId: number): Promise<UserDetail> =>
   apiRequest(() => apiClient.post(`api/auth/staff/${staffId}/approve/`).json<UserDetail>());
 
@@ -157,6 +161,9 @@ export const createSchedule = async (
   apiRequest(() => apiClient.post(`api/trips/${tripId}/schedules/`, { json: body }).json<Schedule>());
 
 export const listTripParticipants = listParticipants;
+
+export const getPlace = async (placeId: number): Promise<Place> =>
+  apiRequest(() => apiClient.get(`api/places/${placeId}/`).json<Place>());
 
 export const assignTripManager = async (tripId: number, managerId: number): Promise<Trip> =>
   apiRequest(async () => {

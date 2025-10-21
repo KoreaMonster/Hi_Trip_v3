@@ -96,10 +96,14 @@ class LogoutResponseSerializer(serializers.Serializer):
 
 
 class TravelerSerializer(serializers.ModelSerializer):
+    """여행자 정보 직렬화.
+
+    기본 인적 사항뿐 아니라 주소, 결제, 자동 검증 결과 등 백엔드 모델에
+    정의된 대부분의 필드를 그대로 노출해 상세 화면에서 활용할 수 있도록
+    확장했다.
     """
-    여행자 정보 직렬화
-    TripParticipant에서 참가자 정보 표시용
-    """
+
+    payment_status = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Traveler
@@ -113,6 +117,20 @@ class TravelerSerializer(serializers.ModelSerializer):
             'phone',
             'email',
             'birth_date',
-            'gender'
+            'gender',
+            'address',
+            'country',
+            'is_companion',
+            'companion_names',
+            'proxy_booking',
+            'passport_number',
+            'passport_expiry',
+            'passport_verified',
+            'identity_verified',
+            'booking_verified',
+            'total_amount',
+            'paid_amount',
+            'insurance_subscribed',
+            'payment_status',
         ]
-        read_only_fields = ['id', 'full_name_kr']
+        read_only_fields = ['id', 'full_name_kr', 'payment_status']

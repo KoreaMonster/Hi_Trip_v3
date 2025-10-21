@@ -1,5 +1,6 @@
 'use client';
-
+ 
+import Link from 'next/link';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -555,24 +556,60 @@ export default function SchedulesPage() {
                             </td>
                           </tr>
                         )}
-                        {activeDaySchedules.map((schedule) => (
-                          <tr key={schedule.id} className="transition hover:bg-slate-50/70">
-                            <td className="px-5 py-3 font-medium text-slate-700">
-                              {schedule.start_time.slice(0, 5)} ~ {schedule.end_time.slice(0, 5)}
-                            </td>
-                            <td className="px-5 py-3 text-slate-700">
-                              <div className="font-semibold text-slate-900">
-                                {schedule.main_content ?? schedule.place_name ?? '세부 일정 미정'}
-                              </div>
-                              <div className="text-xs text-slate-500">#{schedule.order.toString().padStart(2, '0')}</div>
-                            </td>
-                            <td className="px-5 py-3 text-slate-600">{schedule.meeting_point ?? '집결지 미정'}</td>
-                            <td className="px-5 py-3 text-slate-600">{schedule.transport ?? '미정'}</td>
-                            <td className="px-5 py-3 text-right text-slate-700">
-                              {schedule.budget ? `${schedule.budget.toLocaleString()}원` : '-'}
-                            </td>
-                          </tr>
-                        ))}
+                        {activeDaySchedules.map((schedule) => {
+                          const placeId =
+                            typeof schedule.place_id === 'number'
+                              ? schedule.place_id
+                              : typeof schedule.place === 'number'
+                                ? schedule.place
+                                : null;
+                          const placeLabel = schedule.place_name ?? null;
+                          return (
+                            <tr key={schedule.id} className="transition hover:bg-slate-50/70">
+                              <td className="px-5 py-3 font-medium text-slate-700">
+                                {schedule.start_time.slice(0, 5)} ~ {schedule.end_time.slice(0, 5)}
+                              </td>
+                              <td className="px-5 py-3 text-slate-700">
+                                <div className="font-semibold text-slate-900">
+                                  {schedule.main_content ? (
+                                    schedule.main_content
+                                  ) : placeLabel ? (
+                                    placeId ? (
+                                      <Link
+                                        href={`/places/${placeId}${selectedTripId ? `?tripId=${selectedTripId}` : ''}`}
+                                        className="text-primary-600 transition hover:text-primary-700"
+                                      >
+                                        {placeLabel}
+                                      </Link>
+                                    ) : (
+                                      placeLabel
+                                    )
+                                  ) : (
+                                    '세부 일정 미정'
+                                  )}
+                                </div>
+                                <div className="text-xs text-slate-500">#{schedule.order.toString().padStart(2, '0')}</div>
+                                {schedule.main_content && placeLabel && (
+                                  placeId ? (
+                                    <Link
+                                      href={`/places/${placeId}${selectedTripId ? `?tripId=${selectedTripId}` : ''}`}
+                                      className="mt-1 inline-flex text-xs font-semibold text-primary-600 transition hover:text-primary-700"
+                                    >
+                                      장소: {placeLabel}
+                                    </Link>
+                                  ) : (
+                                    <div className="mt-1 text-xs text-slate-500">장소: {placeLabel}</div>
+                                  )
+                                )}
+                              </td>
+                              <td className="px-5 py-3 text-slate-600">{schedule.meeting_point ?? '집결지 미정'}</td>
+                              <td className="px-5 py-3 text-slate-600">{schedule.transport ?? '미정'}</td>
+                              <td className="px-5 py-3 text-right text-slate-700">
+                                {schedule.budget ? `${schedule.budget.toLocaleString()}원` : '-'}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

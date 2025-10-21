@@ -1,5 +1,6 @@
 'use client';
-
+ 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ChevronDown,
@@ -283,7 +284,7 @@ export default function PlacesPage() {
           </div>
 
           <aside className="w-full max-w-xl space-y-5 xl:w-[360px]">
-            <PlaceDetailsPanel place={activePlace} />
+            <PlaceDetailsPanel place={activePlace} tripId={selectedTripId} />
 
             <div className="space-y-3 rounded-2xl border border-slate-100 bg-[#F9FBFF] p-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
@@ -418,7 +419,7 @@ function PlaceCard({ place, isActive, onSelect }: { place: Place; isActive: bool
   );
 }
 
-function PlaceDetailsPanel({ place }: { place: Place | null }) {
+function PlaceDetailsPanel({ place, tripId }: { place: Place | null; tripId: number | null }) {
   if (!place) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
@@ -433,14 +434,22 @@ function PlaceDetailsPanel({ place }: { place: Place | null }) {
   return (
     <div className="space-y-5">
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <header className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">일정 장소 정보</h2>
             <p className="text-xs text-slate-500">담당자와 공유할 기본 정보를 확인하세요.</p>
           </div>
-          <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
-            <Compass className="h-3.5 w-3.5" /> {place.category?.name ?? '미분류'}
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
+              <Compass className="h-3.5 w-3.5" /> {place.category?.name ?? '미분류'}
+            </span>
+            <Link
+              href={`/places/${place.id}${tripId ? `?tripId=${tripId}` : ''}`}
+              className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-primary-200 hover:text-primary-600"
+            >
+              상세 보기
+            </Link>
+          </div>
         </header>
 
         <div className="grid gap-3 px-5 py-4 text-sm">

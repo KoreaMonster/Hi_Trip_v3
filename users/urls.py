@@ -6,13 +6,20 @@ Phase 1에서 ViewSet/APIView 구조로 전환하면서 라우팅 방식을 rout
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from .views import LoginAPIView, LogoutAPIView, ProfileAPIView, UserViewSet
+from .views import (
+    LoginAPIView,
+    LogoutAPIView,
+    ProfileAPIView,
+    TravelerViewSet,
+    UserViewSet,
+)
 
 # 초보 개발자 가이드:
 # - DefaultRouter는 등록된 ViewSet에 대해 자동으로 URL을 생성합니다.
 # - /staff/ → list/create, /staff/{pk}/ → retrieve/update/destroy
 router = DefaultRouter()
 router.register("staff", UserViewSet, basename="staff")
+router.register("travelers", TravelerViewSet, basename="traveler")
 
 urlpatterns = [
     # 기존 /register/ 엔드포인트를 유지하면서 내부적으로 ViewSet의 create를 호출합니다.

@@ -130,6 +130,20 @@ export type Traveler = {
   email: string;
   birth_date: string;
   gender: 'M' | 'F';
+  address: string | null;
+  country: string;
+  is_companion: boolean;
+  companion_names: string | null;
+  proxy_booking: boolean;
+  passport_number: string | null;
+  passport_expiry: string | null;
+  passport_verified: boolean;
+  identity_verified: boolean;
+  booking_verified: boolean;
+  total_amount: number;
+  paid_amount: number;
+  insurance_subscribed: boolean;
+  payment_status: boolean;
 };
 
 export type TripParticipant = {
