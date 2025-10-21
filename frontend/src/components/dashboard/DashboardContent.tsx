@@ -9,29 +9,17 @@ import {
   useSchedulesQuery,
   useTripsQuery,
 } from '@/lib/queryHooks';
-import type { MonitoringAlert, Schedule } from '@/types/api';
+import type { Schedule } from '@/types/api';
 import {
   AlertTriangle,
   CalendarCheck,
   CircleDashed,
-  HeartPulse,
   Leaf,
-  MapPin,
   Plane,
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
 import BookingTrendChart, { type BookingTrendPoint } from './BookingTrendChart';
-
-const alertStyles: Record<MonitoringAlert['alert_type'], string> = {
-  health: 'border border-rose-200 bg-rose-50 text-rose-700',
-  location: 'border border-amber-200 bg-amber-50 text-amber-700',
-};
-
-const alertIcons: Record<MonitoringAlert['alert_type'], JSX.Element> = {
-  health: <HeartPulse className="h-4 w-4" />,
-  location: <MapPin className="h-4 w-4" />,
-};
 
 const summaryCards = [
   {
@@ -75,17 +63,6 @@ const monitoringBadgeLabels: Record<MonitoringLevel, string> = {
   warning: '주의',
   critical: '위험',
   unknown: '정보 없음',
-};
-
-const formatDateTime = (date?: Date | null) => {
-  if (!date) return '일정 미정';
-  return `${date.getMonth() + 1}월 ${date.getDate()}일 · ${date
-    .getHours()
-    .toString()
-    .padStart(2, '0')}:${date
-    .getMinutes()
-    .toString()
-    .padStart(2, '0')}`;
 };
 
 const formatTripRange = (start?: string | null, end?: string | null) => {
@@ -217,40 +194,6 @@ export default function DashboardContent() {
     [trips],
   );
 
-  const checklistSuggestions = useMemo(() => {
-    const suggestions: { icon: JSX.Element; text: string }[] = [];
-
-    if (unassignedTrips > 0) {
-      suggestions.push({
-        icon: <AlertTriangle className="h-4 w-4 text-amber-500" />,
-        text: `담당자 미배정 여행 ${unassignedTrips}건 확인`,
-      });
-    }
-
-    if (participantsAtRisk.length > 0) {
-      suggestions.push({
-        icon: <HeartPulse className="h-4 w-4 text-rose-500" />,
-        text: `주의 상태 참가자 ${participantsAtRisk.length}명 건강 데이터 점검`,
-      });
-    }
-
-    if (todaysSchedules.length > 0) {
-      suggestions.push({
-        icon: <CalendarCheck className="h-4 w-4 text-primary-500" />,
-        text: `오늘 예정된 일정 ${todaysSchedules.length}건 진행 준비`,
-      });
-    }
-
-    if (totalAlerts === 0 && suggestions.length === 0) {
-      suggestions.push({
-        icon: <Sparkles className="h-4 w-4 text-emerald-500" />,
-        text: '현재 모든 운영 항목이 정상입니다. 다음 여행을 준비하세요.',
-      });
-    }
-
-    return suggestions.slice(0, 3);
-  }, [unassignedTrips, participantsAtRisk.length, todaysSchedules.length, totalAlerts]);
-
   const healthStatusLabel = health?.status === 'ok' ? '정상' : '점검 필요';
   const healthMessage = health?.message ?? '상태 정보를 불러오는 중입니다.';
   const healthServiceLabel = health?.service ? `서비스 · ${health.service}` : '서비스 정보 없음';
@@ -326,7 +269,7 @@ export default function DashboardContent() {
             </article>
           </section>
 
-          <section className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+          <section className="grid gap-4">
             <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex items-start justify-between">
                 <div>
@@ -341,51 +284,9 @@ export default function DashboardContent() {
                 <BookingTrendChart data={bookingTrendData} />
               </div>
             </article>
-
-            <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900">모니터링 알림</h2>
-                  <p className="text-sm text-slate-500">경보가 발생한 여행을 우선 확인하세요.</p>
-                </div>
-                <span className="rounded-full bg-rose-500/10 px-3 py-1 text-xs font-medium text-rose-600">
-                  총 {totalAlerts}건
-                </span>
-              </div>
-              <div className="mt-5 space-y-3">
-                {(monitoringAlerts?.length ?? 0) === 0 && (
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-6 text-center text-sm text-emerald-600">
-                    모든 여행이 안정적으로 운영 중입니다.
-                  </div>
-                )}
-                {(monitoringAlerts ?? []).slice(0, 3).map((alert) => (
-                  <div
-                    key={alert.id}
-                    className={`flex items-center justify-between rounded-xl border px-4 py-3 ${alertStyles[alert.alert_type]}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/70 text-slate-700 shadow-sm">
-                        {alertIcons[alert.alert_type]}
-                      </span>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800">{alert.traveler_name}</p>
-                        <p className="text-xs text-slate-600">{alert.message}</p>
-                        <p className="text-xs text-slate-400">{formatDateTime(new Date(alert.snapshot_time))}</p>
-                      </div>
-                    </div>
-                    <span className="text-xs font-medium text-slate-700">Trip #{alert.trip_id}</span>
-                  </div>
-                ))}
-                {participantsAtRisk.length > 0 && (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-                    주의 필요 참가자 {participantsAtRisk.length}명 · 실시간 상태를 확인하세요.
-                  </div>
-                )}
-              </div>
-            </article>
           </section>
 
-          <section className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+          <section className="grid gap-4">
             <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex items-start justify-between">
                 <div>
@@ -438,24 +339,6 @@ export default function DashboardContent() {
                   </tbody>
                 </table>
               </div>
-            </article>
-
-            <article className="flex flex-col justify-between gap-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="space-y-2">
-                <h2 className="text-lg font-semibold text-slate-900">운영 체크리스트</h2>
-                <p className="text-sm text-slate-500">팀과 공유할 중요 업무를 정리했습니다.</p>
-              </div>
-              <ul className="space-y-3 text-sm text-slate-600">
-                {checklistSuggestions.map(({ icon, text }, index) => (
-                  <li key={index} className="flex items-center gap-3">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-50">{icon}</span>
-                    {text}
-                  </li>
-                ))}
-              </ul>
-              <button className="mt-auto inline-flex items-center justify-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700">
-                체크리스트 내보내기
-              </button>
             </article>
           </section>
         </div>

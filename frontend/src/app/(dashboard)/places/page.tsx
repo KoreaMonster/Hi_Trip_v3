@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Clock4, Compass, Filter, Locate, MapPin, Navigation, Search, Sparkles, Stars } from 'lucide-react';
-import { useCategoriesQuery, usePlacesQuery } from '@/lib/queryHooks';
+import { ChevronDown, Clock4, Compass, Filter, Locate, MapPin, Navigation, Search, Sparkles, Stars } from 'lucide-react';
+import { useCategoriesQuery, usePlacesQuery, useTripsQuery } from '@/lib/queryHooks';
 import type { Place, PlaceAlternativeInfo } from '@/types/api';
 
 const parseAlternative = (
@@ -45,9 +45,11 @@ const buildDescriptionLines = (text?: string | null) => {
 export default function PlacesPage() {
   const { data: places = [], isLoading } = usePlacesQuery();
   const { data: categories = [] } = useCategoriesQuery();
+  const { data: trips = [] } = useTripsQuery();
   const [selectedCategory, setSelectedCategory] = useState<'all' | number>('all');
   const [keyword, setKeyword] = useState('');
   const [activePlaceId, setActivePlaceId] = useState<number | null>(null);
+  const [selectedTripId, setSelectedTripId] = useState<number | null>(null);
 
   const categoryOptions = useMemo(() => {
     const unique = new Map<number, string>();
@@ -74,6 +76,12 @@ export default function PlacesPage() {
       setSelectedCategory('all');
     }
   }, [categoryOptions, selectedCategory]);
+
+  useEffect(() => {
+    if (trips.length > 0 && selectedTripId === null) {
+      setSelectedTripId(trips[0].id);
+    }
+  }, [selectedTripId, trips]);
 
   const filtered = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLowerCase();
@@ -106,6 +114,8 @@ export default function PlacesPage() {
     [filtered, activePlaceId],
   );
 
+  const selectedTrip = useMemo(() => trips.find((trip) => trip.id === selectedTripId) ?? null, [trips, selectedTripId]);
+
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
@@ -114,8 +124,32 @@ export default function PlacesPage() {
             <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">장소 라이브러리</p>
             <h1 className="mt-1 text-2xl font-bold text-slate-900">추천 장소 & 담당자 메모</h1>
             <p className="mt-1 text-sm text-slate-500">여행 일정에 활용할 장소를 검색하고 대체 옵션을 준비하세요.</p>
+            {selectedTrip && (
+              <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
+                <Navigation className="h-3.5 w-3.5" /> {selectedTrip.title} · {selectedTrip.destination}
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            <div className="relative">
+              <select
+                value={selectedTripId ?? ''}
+                onChange={(event) => {
+                  const value = Number(event.target.value);
+                  setSelectedTripId(Number.isNaN(value) ? null : value);
+                }}
+                disabled={trips.length === 0}
+                className="appearance-none rounded-full border border-slate-200 bg-white px-4 py-2 pr-10 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus:border-primary-300 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {trips.length === 0 && <option value="">등록된 여행 없음</option>}
+                {trips.map((trip) => (
+                  <option key={trip.id} value={trip.id}>
+                    {trip.title}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            </div>
             <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-500 shadow-sm">
               <Search className="h-4 w-4 text-primary-500" />
               <input

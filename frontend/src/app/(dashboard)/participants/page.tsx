@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ArrowUpRight, BadgeCheck, ChevronDown, IdCard, Mail, Phone, UsersRound } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, UsersRound } from 'lucide-react';
 import { useParticipantsQuery, useTripsQuery } from '@/lib/queryHooks';
 import type { TripParticipant } from '@/types/api';
 
@@ -138,7 +138,7 @@ export default function ParticipantsPage() {
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.6fr_1fr]">
+      <section>
         <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
             <div>
@@ -151,7 +151,7 @@ export default function ParticipantsPage() {
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-100 text-sm">
-            <thead className="bg-[#F7F9FC] text-slate-500">
+              <thead className="bg-[#F7F9FC] text-slate-500">
               <tr>
                 <th className="px-5 py-3 text-left font-semibold">이름</th>
                 <th className="px-5 py-3 text-left font-semibold">연락처</th>
@@ -205,47 +205,10 @@ export default function ParticipantsPage() {
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
         </div>
         </article>
-
-        <aside className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">긴급 연락 카드</h2>
-          <p className="text-sm text-slate-500">팀에 즉시 공유할 주요 연락망입니다.</p>
-          <div className="space-y-3">
-            {participants.slice(0, 3).map((participant) => (
-              <div key={participant.id} className="rounded-2xl border border-slate-100 bg-[#E8F1FF] p-4 shadow-inner">
-                <p className="text-sm font-semibold text-slate-900">{participant.traveler.full_name_kr}</p>
-                <p className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-                  <Phone className="h-3.5 w-3.5 text-primary-500" />
-                  {participant.traveler.phone}
-                </p>
-                <p className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-                  <Mail className="h-3.5 w-3.5 text-primary-500" />
-                  {participant.traveler.email}
-                </p>
-                <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-primary-600">
-                  <BadgeCheck className="h-3.5 w-3.5" /> 체크인 완료
-                </p>
-              </div>
-            ))}
-            {participants.length === 0 && (
-              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                등록된 연락 카드가 없습니다.
-              </div>
-            )}
-          </div>
-          <div className="rounded-2xl border border-slate-100 bg-[#F9FBFF] p-4 text-xs text-slate-500">
-            <p className="font-semibold text-slate-800">팁</p>
-            <p className="mt-1 leading-relaxed">
-              참가자 노트에 건강 유의사항이나 식단 정보를 기록해두면 긴급 상황 대응이 빨라집니다.
-            </p>
-          </div>
-          <button className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-4 py-2 text-xs font-semibold text-primary-600 transition hover:bg-primary-100">
-            <IdCard className="h-4 w-4" /> 연락 카드 내보내기
-          </button>
-        </aside>
       </section>
     </div>
   );
