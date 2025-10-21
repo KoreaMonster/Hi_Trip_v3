@@ -332,19 +332,20 @@ export default function PlacesPage() {
                 <th className="px-4 py-3 text-left font-semibold">이동 수단</th>
                 <th className="px-4 py-3 text-left font-semibold">집결지</th>
                 <th className="px-4 py-3 text-right font-semibold">예산</th>
+                <th className="px-4 py-3 text-right font-semibold">상세</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {schedulesLoading && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={7} className="px-4 py-6 text-center text-sm text-slate-500">
                     일정을 불러오는 중입니다.
                   </td>
                 </tr>
               )}
               {!schedulesLoading && sortedSchedules.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={7} className="px-4 py-6 text-center text-sm text-slate-500">
                     선택한 여행에 등록된 일정이 없습니다.
                   </td>
                 </tr>
@@ -390,6 +391,19 @@ export default function PlacesPage() {
                   <td className="px-4 py-3 text-slate-600">{schedule.meeting_point ?? '집결지 미정'}</td>
                   <td className="px-4 py-3 text-right text-slate-700">
                     {schedule.budget ? `${schedule.budget.toLocaleString()}원` : '-'}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {detailHref ? (
+                      <Link
+                        href={detailHref}
+                        className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-primary-200 hover:text-primary-600"
+                      >
+                        상세 보기
+                        <ArrowUpRight className="h-3.5 w-3.5" />
+                      </Link>
+                    ) : (
+                      <span className="text-xs text-slate-400">연결된 장소 없음</span>
+                    )}
                   </td>
                   </tr>
                 );

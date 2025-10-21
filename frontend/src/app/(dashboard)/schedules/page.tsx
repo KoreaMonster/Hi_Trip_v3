@@ -792,20 +792,27 @@ export default function SchedulesPage() {
                                 </td>
                               </tr>
                             )}
-                            {orderedActiveSchedules.map((schedule, index) => (
-                              <tr
-                                key={schedule.id}
-                                draggable={canEditSchedule}
-                                onDragStart={handleDragStart(schedule.id)}
-                                onDragOver={handleDragOver(schedule.id)}
-                                onDragEnd={handleDragEnd}
-                                onDrop={(event) => event.preventDefault()}
-                                className={`transition ${
-                                  canEditSchedule ? 'cursor-move' : ''
-                                } ${
-                                  draggingId === schedule.id ? 'bg-primary-50/60' : 'hover:bg-slate-50/70'
-                                }`}
-                              >
+                            {orderedActiveSchedules.map((schedule, index) => {
+                              const placeId =
+                                typeof schedule.place === 'number'
+                                  ? schedule.place
+                                  : schedule.place_id ?? null;
+                              const detailHref = placeId ? `/places/${placeId}` : null;
+
+                              return (
+                                <tr
+                                  key={schedule.id}
+                                  draggable={canEditSchedule}
+                                  onDragStart={handleDragStart(schedule.id)}
+                                  onDragOver={handleDragOver(schedule.id)}
+                                  onDragEnd={handleDragEnd}
+                                  onDrop={(event) => event.preventDefault()}
+                                  className={`transition ${
+                                    canEditSchedule ? 'cursor-move' : ''
+                                  } ${
+                                    draggingId === schedule.id ? 'bg-primary-50/60' : 'hover:bg-slate-50/70'
+                                  }`}
+                                >
                                 <td className="px-5 py-3 font-medium text-slate-700">
                                   {schedule.start_time.slice(0, 5)} ~ {schedule.end_time.slice(0, 5)}
                                 </td>
@@ -821,9 +828,9 @@ export default function SchedulesPage() {
                                   {schedule.budget ? `${schedule.budget.toLocaleString()}원` : '-'}
                                 </td>
                                 <td className="px-5 py-3 text-right">
-                                  {schedule.place_id ? (
+                                  {detailHref ? (
                                     <Link
-                                      href={`/places/${schedule.place_id}`}
+                                      href={detailHref}
                                       className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-primary-200 hover:text-primary-600"
                                     >
                                       상세 보기
@@ -833,8 +840,9 @@ export default function SchedulesPage() {
                                     <span className="text-xs text-slate-400">연결된 장소 없음</span>
                                   )}
                                 </td>
-                              </tr>
-                            ))}
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
