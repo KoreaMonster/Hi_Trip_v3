@@ -1,38 +1,36 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  ActivitySquare,
-  AlertTriangle,
-  ChevronDown,
-  Clock3,
-  Droplet,
-  PlayCircle,
-  RefreshCcw,
-} from 'lucide-react';
+import { AlertTriangle, RefreshCcw, TimerReset } from 'lucide-react';
 import { postMonitoringGenerateDemo } from '@/lib/api';
 import { useMonitoringLatestQuery, useTripsQuery } from '@/lib/queryHooks';
 import type { MonitoringDemoResponse, ParticipantLatest, Trip } from '@/types/api';
 
-const statusMeta: Record<string, { label: string; tone: string }> = {
-  normal: {
-    label: '정상',
-    tone: 'bg-emerald-50 text-emerald-600 border border-emerald-200',
-  },
-  danger: {
-    label: '위험',
-    tone: 'bg-rose-50 text-rose-600 border border-rose-200',
-  },
-  warning: {
-    label: '주의',
-    tone: 'bg-amber-50 text-amber-600 border border-amber-200',
-  },
-  unknown: {
-    label: '수집 대기',
-    tone: 'bg-slate-100 text-slate-500 border border-slate-200',
-  },
+const REFRESH_INTERVAL_MS = 3000;
+
+const statusLabel: Record<string, string> = {
+  normal: '정상',
+  warning: '주의',
+  danger: '위험',
+  unknown: '수집 대기',
+};
+
+const statusTone: Record<string, string> = {
+  normal: 'bg-emerald-50 text-emerald-600 border border-emerald-200',
+  warning: 'bg-amber-50 text-amber-600 border border-amber-200',
+  danger: 'bg-rose-50 text-rose-600 border border-rose-200',
+  unknown: 'bg-slate-100 text-slate-500 border border-slate-200',
+};
+
+const resolveStatus = (item: ParticipantLatest) => {
+  const raw = item.health?.status?.toLowerCase();
+  if (!raw) return 'unknown';
+  if (raw.includes('danger') || raw.includes('critical') || raw.includes('위험')) return 'danger';
+  if (raw.includes('warning') || raw.includes('주의')) return 'warning';
+  if (raw.includes('normal') || raw.includes('정상')) return 'normal';
+  return (raw as keyof typeof statusLabel) in statusLabel ? (raw as keyof typeof statusLabel) : 'unknown';
 };
 
 const formatMeasuredAt = (value?: string | null) => {
@@ -47,47 +45,63 @@ const formatMeasuredAt = (value?: string | null) => {
   });
 };
 
-const resolveStatusTone = (snapshot: ParticipantLatest): { label: string; tone: string } => {
-  const statusKey = snapshot.health?.status ?? 'unknown';
-  return statusMeta[statusKey] ?? statusMeta.unknown;
-};
-
 const toNumber = (value?: string | null): number | null => {
   if (typeof value !== 'string') return null;
   const parsed = Number(value);
-  if (Number.isNaN(parsed)) return null;
-  return parsed;
+  return Number.isNaN(parsed) ? null : parsed;
 };
 
-const findLastUpdated = (snapshots: ParticipantLatest[]): string | null => {
-  const times = snapshots
+const findLastUpdated = (items: ParticipantLatest[]) => {
+  const latest = items
     .map((item) => item.health?.measured_at ?? item.location?.measured_at ?? null)
-    .filter((value): value is string => Boolean(value));
-
-  if (times.length === 0) {
-    return null;
-  }
-
-  return times.reduce((latest, current) => {
-    return new Date(current).getTime() > new Date(latest).getTime() ? current : latest;
-  });
+    .filter((value): value is string => Boolean(value))
+    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+  return latest.at(0) ?? null;
 };
 
 export default function InTripCustomersPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+
   const { data: trips = [], isLoading: tripsLoading } = useTripsQuery();
-  const ongoingTrips = useMemo(
-    () => trips.filter((trip) => trip.status === 'ongoing'),
-    [trips],
-  );
-  const [selectedTripId, setSelectedTripId] = useState<number | null>(null);
+  const ongoingTrips = useMemo(() => trips.filter((trip) => trip.status === 'ongoing'), [trips]);
+
+  const queryTripId = useMemo(() => {
+    const value = searchParams?.get('tripId');
+    if (!value) return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }, [searchParams]);
+
+  const [selectedTripId, setSelectedTripId] = useState<number | null>(queryTripId);
 
   useEffect(() => {
-    if (ongoingTrips.length > 0 && selectedTripId === null) {
-      setSelectedTripId(ongoingTrips[0].id);
+    if (selectedTripId !== null && ongoingTrips.some((trip) => trip.id === selectedTripId)) {
+      return;
     }
-  }, [ongoingTrips, selectedTripId]);
+    if (queryTripId !== null && ongoingTrips.some((trip) => trip.id === queryTripId)) {
+      setSelectedTripId(queryTripId);
+      return;
+    }
+    setSelectedTripId(ongoingTrips[0]?.id ?? null);
+  }, [ongoingTrips, queryTripId, selectedTripId]);
+
+  useEffect(() => {
+    if (!pathname) return;
+    const params = new URLSearchParams(searchParams?.toString() ?? '');
+    if (selectedTripId === null) {
+      if (!params.has('tripId')) return;
+      params.delete('tripId');
+    } else {
+      const nextValue = String(selectedTripId);
+      if (params.get('tripId') === nextValue) return;
+      params.set('tripId', nextValue);
+    }
+    const query = params.toString();
+    router.replace(query.length > 0 ? `${pathname}?${query}` : pathname);
+  }, [pathname, router, searchParams, selectedTripId]);
 
   const selectedTrip = useMemo<Trip | undefined>(
     () => ongoingTrips.find((trip) => trip.id === (selectedTripId ?? -1)),
@@ -98,135 +112,146 @@ export default function InTripCustomersPage() {
     data: latest = [],
     isLoading: latestLoading,
     isFetching: latestFetching,
-    isError: latestIsError,
-    error: latestError,
+    isError: latestError,
+    error: latestErrorObject,
     refetch: refetchLatest,
   } = useMonitoringLatestQuery(selectedTripId ?? undefined, {
     enabled: typeof selectedTripId === 'number',
-    refetchInterval: 1000 * 5,
+    refetchInterval: selectedTripId !== null ? REFRESH_INTERVAL_MS : false,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: false,
     staleTime: 0,
   });
 
+  useEffect(() => {
+    if (selectedTripId === null) return;
+    void refetchLatest();
+  }, [refetchLatest, selectedTripId]);
+
   const generateMutation = useMutation({
-    mutationFn: (): Promise<MonitoringDemoResponse> =>
-      postMonitoringGenerateDemo(selectedTripId!, { minutes: 5, interval: 30 }),
-    onSuccess: (payload) => {
-      void queryClient.invalidateQueries({ queryKey: ['monitoring', 'alerts', selectedTripId] });
-      void queryClient.invalidateQueries({ queryKey: ['monitoring', 'latest', selectedTripId] });
-      return payload;
+    mutationFn: (tripId: number): Promise<MonitoringDemoResponse> =>
+      postMonitoringGenerateDemo(tripId, { minutes: 5, interval: 30 }),
+    onSuccess: (_, tripId) => {
+      queryClient.invalidateQueries({ queryKey: ['monitoring', 'latest', tripId] });
+      queryClient.invalidateQueries({ queryKey: ['monitoring', 'history', tripId], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['monitoring', 'alerts', tripId] });
+      void refetchLatest();
     },
   });
 
+  const sortedLatest = useMemo(() => {
+    return [...latest].sort((a, b) => {
+      const timeA = new Date(a.health?.measured_at ?? a.location?.measured_at ?? 0).getTime();
+      const timeB = new Date(b.health?.measured_at ?? b.location?.measured_at ?? 0).getTime();
+      return timeB - timeA;
+    });
+  }, [latest]);
+
   const lastUpdated = useMemo(() => findLastUpdated(latest), [latest]);
-  const latestErrorMessage = latestIsError
-    ? latestError instanceof Error
-      ? latestError.message
-      : '모니터링 데이터를 불러오지 못했습니다.'
+  const errorMessage = latestError
+    ? latestErrorObject instanceof Error
+      ? latestErrorObject.message
+      : '모니터링 데이터를 불러오는 중 문제가 발생했습니다.'
     : null;
 
-  const handleGenerateClick = () => {
-    if (!selectedTripId || generateMutation.isPending) {
-      return;
-    }
-    generateMutation.mutate();
+  const handleGenerate = () => {
+    if (selectedTripId === null || generateMutation.isPending) return;
+    generateMutation.mutate(selectedTripId);
   };
 
   const handleRowClick = (participantId: number) => {
-    if (!selectedTripId) return;
+    if (selectedTripId === null) return;
     router.push(`/customers/in-trip/${participantId}?tripId=${selectedTripId}`);
   };
 
   return (
     <div className="space-y-6">
-      <section className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">여행 중 고객 관리</p>
-            <h1 className="mt-1 text-2xl font-bold text-slate-900">실시간 신청자 현황</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              모니터링 API로 유입되는 건강 데이터를 5초마다 새로고침하여 최신 고객 상태를 확인하세요.
+      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="space-y-2">
+            <h1 className="text-2xl font-semibold text-slate-900">신청자 실시간 모니터링</h1>
+            <p className="text-sm text-slate-500">
+              백엔드가 생성하는 건강 데이터를 {REFRESH_INTERVAL_MS / 1000}초 간격으로 불러와 최신 상태를 보여줍니다.
             </p>
             {selectedTrip && (
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="text-xs text-slate-500">
                 선택한 여행: <span className="font-semibold text-slate-700">{selectedTrip.title}</span> · {selectedTrip.destination}
               </p>
             )}
             {lastUpdated && (
-              <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                <Clock3 className="h-3.5 w-3.5" /> 마지막 업데이트 {formatMeasuredAt(lastUpdated)}
+              <p className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                <TimerReset className="h-3.5 w-3.5" /> 마지막 측정 {formatMeasuredAt(lastUpdated)}
               </p>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative">
-              <select
-                value={selectedTripId ?? ''}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setSelectedTripId(value ? Number(value) : null);
-                }}
-                disabled={ongoingTrips.length === 0}
-                className="appearance-none rounded-full border border-slate-200 bg-white px-4 py-2 pr-10 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus:border-primary-300 focus:outline-none disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {ongoingTrips.length === 0 && <option value="">진행 중인 여행이 없습니다</option>}
-                {ongoingTrips.map((trip) => (
-                  <option key={trip.id} value={trip.id}>
-                    {trip.title}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            </div>
+            <select
+              value={selectedTripId ?? ''}
+              onChange={(event) => {
+                const value = event.target.value;
+                setSelectedTripId(value ? Number(value) : null);
+              }}
+              disabled={ongoingTrips.length === 0}
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus:border-primary-300 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {ongoingTrips.length === 0 && <option value="">진행 중인 여행이 없습니다</option>}
+              {ongoingTrips.map((trip) => (
+                <option key={trip.id} value={trip.id}>
+                  {trip.title}
+                </option>
+              ))}
+            </select>
             <button
               type="button"
-              onClick={() => refetchLatest()}
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600"
-              disabled={latestLoading || !selectedTripId}
+              onClick={() => {
+                if (selectedTripId === null) return;
+                void refetchLatest();
+              }}
+              disabled={selectedTripId === null || latestLoading}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <RefreshCcw className={`h-4 w-4 ${latestFetching ? 'animate-spin text-primary-500' : ''}`} /> 수동 새로고침
+              <RefreshCcw className={`h-4 w-4 ${latestFetching ? 'animate-spin text-primary-500' : ''}`} /> 새로고침
             </button>
             <button
               type="button"
-              onClick={handleGenerateClick}
-              disabled={!selectedTripId || generateMutation.isPending}
-              className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-70"
+              onClick={handleGenerate}
+              disabled={selectedTripId === null || generateMutation.isPending}
+              className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <PlayCircle className={generateMutation.isPending ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
-              데이터 생성
+              {generateMutation.isPending ? '생성 중...' : '데이터 생성'}
             </button>
           </div>
         </div>
-        {generateMutation.isSuccess && generateMutation.data && (
-          <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-            더미 데이터 {generateMutation.data.created}건을 생성했습니다. (참가자 {generateMutation.data.participants}명 · {generateMutation.data.minutes}
-            분 · {generateMutation.data.interval}초 간격)
-          </div>
+        {generateMutation.isSuccess && (
+          <p className="mt-4 rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+            더미 데이터 생성을 시작했습니다. 잠시 후 참가자 목록이 자동으로 갱신됩니다.
+          </p>
         )}
         {generateMutation.isError && (
-          <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
+          <p className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-600">
             데이터를 생성하지 못했습니다. 다시 시도해 주세요.
-          </div>
+          </p>
         )}
       </section>
 
       <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">신청자 현황 리스트</h2>
-            <p className="text-sm text-slate-500">참가자를 클릭하면 시계열 상세 화면으로 이동합니다.</p>
+            <h2 className="text-lg font-semibold text-slate-900">신청자 현황</h2>
+            <p className="text-sm text-slate-500">백엔드에서 받은 최신 측정값을 실시간으로 표시합니다.</p>
           </div>
-          <span className="inline-flex items-center gap-2 rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
-            <ActivitySquare className="h-3.5 w-3.5" /> 실시간 갱신 중 (5초 간격)
+          <span className="text-xs font-semibold text-primary-600">
+            {selectedTripId !== null ? `${REFRESH_INTERVAL_MS / 1000}초마다 자동 새로고침` : '여행을 선택해 주세요'}
           </span>
         </div>
-        {latestErrorMessage && (
+        {errorMessage && (
           <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
-            <AlertTriangle className="mr-2 inline h-4 w-4" /> {latestErrorMessage}
+            <AlertTriangle className="mr-2 inline h-4 w-4" /> {errorMessage}
           </div>
         )}
         <div className="overflow-hidden rounded-2xl border border-slate-200">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-[#F7F9FC] text-slate-500">
+            <thead className="bg-slate-50 text-slate-500">
               <tr>
                 <th className="px-5 py-3 text-left font-semibold">이름</th>
                 <th className="px-5 py-3 text-left font-semibold">심박수</th>
@@ -243,16 +268,16 @@ export default function InTripCustomersPage() {
                   </td>
                 </tr>
               )}
-              {!latestLoading && latest.length === 0 && (
+              {!latestLoading && sortedLatest.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-5 py-6 text-center text-sm text-slate-500">
-                    아직 수집된 신청자 데이터가 없습니다. 상단의 데이터 생성 버튼을 눌러 흐름을 시작하세요.
+                    아직 수집된 데이터가 없습니다. 상단의 데이터 생성 버튼을 눌러 시뮬레이션을 시작해 주세요.
                   </td>
                 </tr>
               )}
-              {latest.map((item) => {
-                const tone = resolveStatusTone(item);
-                const heartRate = item.health?.heart_rate ?? '—';
+              {sortedLatest.map((item) => {
+                const statusKey = resolveStatus(item);
+                const heartRate = item.health?.heart_rate;
                 const spo2 = toNumber(item.health?.spo2);
                 const measuredAt = item.health?.measured_at ?? item.location?.measured_at ?? null;
                 return (
@@ -263,14 +288,10 @@ export default function InTripCustomersPage() {
                   >
                     <td className="px-5 py-4 font-semibold text-slate-800">{item.traveler_name}</td>
                     <td className="px-5 py-4 text-slate-600">{typeof heartRate === 'number' ? `${heartRate} bpm` : '—'}</td>
+                    <td className="px-5 py-4 text-slate-600">{spo2 !== null ? `${spo2.toFixed(2)}%` : '—'}</td>
                     <td className="px-5 py-4 text-slate-600">
-                      <span className="inline-flex items-center gap-2">
-                        <Droplet className="h-4 w-4 text-sky-500" /> {spo2 !== null ? `${spo2.toFixed(2)}%` : '—'}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 text-slate-600">
-                      <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${tone.tone}`}>
-                        {tone.label}
+                      <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${statusTone[statusKey]}`}>
+                        {statusLabel[statusKey]}
                       </span>
                     </td>
                     <td className="px-5 py-4 text-slate-500">{formatMeasuredAt(measuredAt)}</td>
@@ -284,7 +305,7 @@ export default function InTripCustomersPage() {
 
       {ongoingTrips.length === 0 && !tripsLoading && (
         <div className="rounded-3xl border border-slate-200 bg-white px-6 py-6 text-sm text-slate-600 shadow-sm">
-          진행 중인 여행이 없어 모니터링 데이터를 표시할 수 없습니다. 여행 상태를 ‘진행 중’으로 업데이트한 후 다시 확인하세요.
+          진행 중인 여행이 없어 표시할 모니터링 데이터가 없습니다.
         </div>
       )}
     </div>
