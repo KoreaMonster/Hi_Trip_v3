@@ -1,24 +1,27 @@
 'use client';
 
 import { useState } from 'react';
-import { postLogin, getProfile, getHealth } from '@/lib/api';
+import { getHealth, getProfile, postLogin } from '@/lib/api';
 import JsonCard from '@/components/JsonCard';
 import { useUserStore } from '@/stores/useUserStore';
+import type { HealthResponse, LoginResponse, ProfileResponse } from '@/types/api';
 
 export default function UsersTestPage() {
-  const { user, token, setAuth, logout } = useUserStore();
-  const [loginRes, setLoginRes] = useState<any>(null);
-  const [profileRes, setProfileRes] = useState<any>(null);
-  const [healthRes, setHealthRes] = useState<any>(null);
-  const [err, setErr] = useState<any>(null);
+  const { user, setUser, logout } = useUserStore();
+  const [loginRes, setLoginRes] = useState<LoginResponse | null>(null);
+  const [profileRes, setProfileRes] = useState<ProfileResponse | null>(null);
+  const [healthRes, setHealthRes] = useState<HealthResponse | null>(null);
+  const [err, setErr] = useState<unknown>(null);
 
   const handleLogin = async () => {
     setErr(null);
     try {
       const res = await postLogin({ username: 'demo', password: 'demo1234!' });
       setLoginRes(res);
-      setAuth({ user: null as any, token: res.access }); // ky 인터셉터가 Authorization 자동 주입
-    } catch (e) { setErr(e); }
+      setUser(res);
+    } catch (e) {
+      setErr(e);
+    }
   };
 
   const handleProfile = async () => {
@@ -26,13 +29,19 @@ export default function UsersTestPage() {
     try {
       const res = await getProfile();
       setProfileRes(res);
-      setAuth({ user: res, token });
-    } catch (e) { setErr(e); }
+      setUser(res);
+    } catch (e) {
+      setErr(e);
+    }
   };
 
   const handleHealth = async () => {
     setErr(null);
-    try { setHealthRes(await getHealth()); } catch (e) { setErr(e); }
+    try {
+      setHealthRes(await getHealth());
+    } catch (e) {
+      setErr(e);
+    }
   };
 
   return (
@@ -41,10 +50,10 @@ export default function UsersTestPage() {
 
       <div className="flex gap-2 flex-wrap">
         <button className="px-3 py-2 rounded bg-emerald-600 text-white" onClick={handleLogin}>
-          POST users/login/
+          POST /api/auth/login/
         </button>
         <button className="px-3 py-2 rounded bg-indigo-600 text-white" onClick={handleProfile}>
-          GET users/profile/
+          GET /api/auth/profile/
         </button>
         <button className="px-3 py-2 rounded bg-blue-600 text-white" onClick={handleHealth}>
           GET health/
@@ -54,7 +63,7 @@ export default function UsersTestPage() {
         </button>
       </div>
 
-      <JsonCard title="zustand 상태" data={{ user, token }} />
+      <JsonCard title="zustand 상태" data={{ user }} />
       <JsonCard title="login 응답" data={loginRes} />
       <JsonCard title="profile 응답" data={profileRes} />
       <JsonCard title="health 응답" data={healthRes} />

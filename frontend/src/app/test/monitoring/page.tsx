@@ -1,84 +1,65 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import {
-  getHealth,
-  listMonitoringTrips,
-  getMonitoringTrip,
-  getMonitoringTripAction,
-} from '@/lib/api';
+import { getHealth, getMonitoringTripAlerts, getMonitoringTripLatest } from '@/lib/api';
 import JsonCard from '@/components/JsonCard';
+import type { HealthResponse, MonitoringAlert, ParticipantLatest } from '@/types/api';
 
 export default function MonitoringTestPage() {
   // 응답 상태
-  const [health, setHealth] = useState<unknown>(null);
-  const [monTrips, setMonTrips] = useState<unknown>(null);
-  const [tripDetail, setTripDetail] = useState<unknown>(null);
-  const [actionResult, setActionResult] = useState<unknown>(null);
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [alerts, setAlerts] = useState<MonitoringAlert[] | null>(null);
+  const [latest, setLatest] = useState<ParticipantLatest[] | null>(null);
   const [err, setErr] = useState<unknown>(null);
 
   // 입력 상태
   const [tripId, setTripId] = useState<number>(1);
-  const [action, setAction] = useState<string>('metrics'); // 예: 'metrics', 'events'
-  const [query, setQuery] = useState<string>(''); // action 호출 시 ?key=value&... 쿼리 문자열
 
   // 폴링
   const [pollHealth, setPollHealth] = useState<boolean>(false);
-  const [pollDetail, setPollDetail] = useState<boolean>(false);
+  const [pollAlerts, setPollAlerts] = useState<boolean>(false);
+  const [pollLatest, setPollLatest] = useState<boolean>(false);
   const pollHealthTimer = useRef<NodeJS.Timer | null>(null);
-  const pollDetailTimer = useRef<NodeJS.Timer | null>(null);
+  const pollAlertsTimer = useRef<NodeJS.Timer | null>(null);
+  const pollLatestTimer = useRef<NodeJS.Timer | null>(null);
 
-  // 쿼리 문자열을 객체로 변환 (key=value&x=1 → {key:'value', x:'1'})
-  const parseQuery = (qs: string): Record<string, string> => {
-    if (!qs.trim()) return {};
-    return qs.split('&').reduce<Record<string, string>>((acc, part) => {
-      const [k, v] = part.split('=');
-      if (k) acc[k] = v ?? '';
-      return acc;
-    }, {});
-  };
+  const safeTripId = Number.isFinite(tripId) ? tripId : 1;
 
-  // 단발 호출
   const handleHealth = async () => {
     setErr(null);
     try {
       const res = await getHealth();
       setHealth(res);
-    } catch (e) { setErr(e); }
+    } catch (e) {
+      setErr(e);
+    }
   };
 
-  const handleListMonitoringTrips = async () => {
+  const handleAlerts = async () => {
     setErr(null);
     try {
-      const res = await listMonitoringTrips();
-      setMonTrips(res);
-    } catch (e) { setErr(e); }
+      const res = await getMonitoringTripAlerts(safeTripId);
+      setAlerts(res);
+    } catch (e) {
+      setErr(e);
+    }
   };
 
-  const handleTripDetail = async () => {
+  const handleLatest = async () => {
     setErr(null);
     try {
-      const res = await getMonitoringTrip(tripId);
-      setTripDetail(res);
-    } catch (e) { setErr(e); }
+      const res = await getMonitoringTripLatest(safeTripId);
+      setLatest(res);
+    } catch (e) {
+      setErr(e);
+    }
   };
 
-  const handleTripAction = async () => {
-    setErr(null);
-    try {
-      const params = parseQuery(query);
-      const res = await getMonitoringTripAction(tripId, action, params);
-      setActionResult(res);
-    } catch (e) { setErr(e); }
-  };
-
-  // 폴링 토글
   useEffect(() => {
-    // Health 폴링
     if (pollHealth) {
       pollHealthTimer.current = setInterval(() => {
         getHealth().then(setHealth).catch(setErr);
-      }, 5000); // 5초
+      }, 5000);
     } else if (pollHealthTimer.current) {
       clearInterval(pollHealthTimer.current);
       pollHealthTimer.current = null;
@@ -93,45 +74,57 @@ export default function MonitoringTestPage() {
   }, [pollHealth]);
 
   useEffect(() => {
-    // Trip 상세 폴링
-    if (pollDetail) {
-      pollDetailTimer.current = setInterval(() => {
-        getMonitoringTrip(tripId).then(setTripDetail).catch(setErr);
-      }, 5000); // 5초
-    } else if (pollDetailTimer.current) {
-      clearInterval(pollDetailTimer.current);
-      pollDetailTimer.current = null;
+    if (pollAlerts) {
+      pollAlertsTimer.current = setInterval(() => {
+        getMonitoringTripAlerts(safeTripId).then(setAlerts).catch(setErr);
+      }, 5000);
+    } else if (pollAlertsTimer.current) {
+      clearInterval(pollAlertsTimer.current);
+      pollAlertsTimer.current = null;
     }
 
     return () => {
-      if (pollDetailTimer.current) {
-        clearInterval(pollDetailTimer.current);
-        pollDetailTimer.current = null;
+      if (pollAlertsTimer.current) {
+        clearInterval(pollAlertsTimer.current);
+        pollAlertsTimer.current = null;
       }
     };
-  }, [pollDetail, tripId]);
+  }, [pollAlerts, safeTripId]);
+
+  useEffect(() => {
+    if (pollLatest) {
+      pollLatestTimer.current = setInterval(() => {
+        getMonitoringTripLatest(safeTripId).then(setLatest).catch(setErr);
+      }, 5000);
+    } else if (pollLatestTimer.current) {
+      clearInterval(pollLatestTimer.current);
+      pollLatestTimer.current = null;
+    }
+
+    return () => {
+      if (pollLatestTimer.current) {
+        clearInterval(pollLatestTimer.current);
+        pollLatestTimer.current = null;
+      }
+    };
+  }, [pollLatest, safeTripId]);
 
   return (
     <main className="p-6 space-y-5">
-      <h1 className="text-2xl font-bold">Test — Monitoring (목록/상세/액션/폴링)</h1>
+      <h1 className="text-2xl font-bold">Test — Monitoring (alerts/latest/health)</h1>
 
-      {/* 액션 버튼들 */}
       <div className="flex flex-wrap gap-2">
         <button className="px-3 py-2 rounded bg-blue-600 text-white" onClick={handleHealth}>
-          GET /health/
+          GET /api/health/
         </button>
-        <button className="px-3 py-2 rounded bg-emerald-600 text-white" onClick={handleListMonitoringTrips}>
-          GET /monitoring/trips/
+        <button className="px-3 py-2 rounded bg-emerald-600 text-white" onClick={handleAlerts}>
+          GET /api/monitoring/trips/{tripId}/alerts/
         </button>
-        <button className="px-3 py-2 rounded bg-indigo-600 text-white" onClick={handleTripDetail}>
-          GET /monitoring/trips/&#123;id&#125;/
-        </button>
-        <button className="px-3 py-2 rounded bg-fuchsia-600 text-white" onClick={handleTripAction}>
-          GET /monitoring/trips/&#123;id&#125;/&#123;action&#125;/
+        <button className="px-3 py-2 rounded bg-indigo-600 text-white" onClick={handleLatest}>
+          GET /api/monitoring/trips/{tripId}/latest/
         </button>
       </div>
 
-      {/* 입력 파트 */}
       <div className="flex flex-wrap items-center gap-3">
         <label className="text-sm">tripId</label>
         <input
@@ -140,43 +133,26 @@ export default function MonitoringTestPage() {
           value={tripId}
           onChange={(e) => setTripId(Number(e.target.value))}
         />
-
-        <label className="text-sm">action</label>
-        <input
-          type="text"
-          className="px-2 py-2 rounded border"
-          value={action}
-          onChange={(e) => setAction(e.target.value)}
-          placeholder="metrics / events / status ..."
-        />
-
-        <label className="text-sm">query(?key=value&x=1)</label>
-        <input
-          type="text"
-          className="px-2 py-2 rounded border min-w-[240px]"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="since=2025-10-20T00:00:00Z&limit=50"
-        />
       </div>
 
-      {/* 폴링 토글 */}
-      <div className="flex gap-4 items-center">
-        <label className="inline-flex items-center gap-2">
+      <div className="flex flex-wrap gap-4">
+        <label className="inline-flex items-center gap-2 text-sm">
           <input type="checkbox" checked={pollHealth} onChange={(e) => setPollHealth(e.target.checked)} />
-          <span>건강(health) 5초 폴링</span>
+          <span>health 5초 폴링</span>
         </label>
-        <label className="inline-flex items-center gap-2">
-          <input type="checkbox" checked={pollDetail} onChange={(e) => setPollDetail(e.target.checked)} />
-          <span>trip 상세 5초 폴링</span>
+        <label className="inline-flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={pollAlerts} onChange={(e) => setPollAlerts(e.target.checked)} />
+          <span>alerts 5초 폴링</span>
+        </label>
+        <label className="inline-flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={pollLatest} onChange={(e) => setPollLatest(e.target.checked)} />
+          <span>latest 5초 폴링</span>
         </label>
       </div>
 
-      {/* 결과 표시 */}
       <JsonCard title="health 응답" data={health} />
-      <JsonCard title="monitoring/trips 응답" data={monTrips} />
-      <JsonCard title="monitoring/trips/{id} 응답" data={tripDetail} />
-      <JsonCard title="monitoring/trips/{id}/{action} 응답" data={actionResult} />
+      <JsonCard title="monitoring/trips/{id}/alerts 응답" data={alerts} />
+      <JsonCard title="monitoring/trips/{id}/latest 응답" data={latest} />
       <JsonCard title="에러(있다면)" data={err} />
     </main>
   );
