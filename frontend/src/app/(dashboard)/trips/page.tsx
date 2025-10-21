@@ -4,8 +4,8 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CalendarRange, Filter, MapPin, Plane, PlusCircle, UserCog, Users2, X } from 'lucide-react';
 import { assignTripManager, createTrip } from '@/lib/api';
-import { useStaffDirectoryQuery, useTripsQuery } from '@/lib/queryHooks';
-import { useUserStore } from '@/stores/useUserStore';
+import { useStaffDirectoryQuery } from '@/lib/queryHooks';
+import { useScopedTrips } from '@/lib/useScopedTrips';
 import type { Trip, TripCreate } from '@/types/api';
 
 type TripFormState = {
@@ -43,9 +43,8 @@ const tripStatusMeta: Record<Trip['status'], { label: string; tone: string; chip
 const statusFilters: Array<'all' | Trip['status']> = ['all', 'planning', 'ongoing', 'completed'];
 
 export default function TripsPage() {
-  const { data: trips = [], isLoading } = useTripsQuery();
+  const { data: trips = [], isLoading: tripsLoading, isSuperAdmin } = useScopedTrips();
   const queryClient = useQueryClient();
-  const { user } = useUserStore();
   const [filter, setFilter] = useState<(typeof statusFilters)[number]>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [form, setForm] = useState<TripFormState>({ ...initialTripForm });
@@ -54,7 +53,8 @@ export default function TripsPage() {
   const [assignTarget, setAssignTarget] = useState<Trip | null>(null);
   const [assignManagerId, setAssignManagerId] = useState<number | null>(null);
   const [assignError, setAssignError] = useState<string | null>(null);
-  const canManageAssignments = user?.role === 'super_admin';
+  const canManageAssignments = isSuperAdmin;
+  const canCreateTrips = isSuperAdmin;
 
   const createTripMutation = useMutation({
     mutationFn: (payload: TripCreate) => createTrip(payload),
@@ -168,6 +168,9 @@ export default function TripsPage() {
   }, [filter, trips]);
 
   const tableColumnCount = canManageAssignments ? 6 : 5;
+  const emptyTableMessage = filter === 'all'
+    ? (isSuperAdmin ? '등록된 여행이 없습니다.' : '담당된 여행이 아직 배정되지 않았습니다.')
+    : '조건에 해당하는 여행이 없습니다.';
 
   return (
     <div className="space-y-6">
@@ -183,19 +186,25 @@ export default function TripsPage() {
               <Filter className="h-4 w-4" />
               고급 필터
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setForm({ ...initialTripForm });
-                setFormError(null);
-                setFormSuccess(null);
-                setShowCreateModal(true);
-              }}
-              className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700"
-            >
-              <PlusCircle className="h-4 w-4" />
-              새 여행 만들기
-            </button>
+            {canCreateTrips ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setForm({ ...initialTripForm });
+                  setFormError(null);
+                  setFormSuccess(null);
+                  setShowCreateModal(true);
+                }}
+                className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700"
+              >
+                <PlusCircle className="h-4 w-4" />
+                새 여행 만들기
+              </button>
+            ) : (
+              <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-400">
+                조회 전용 모드
+              </span>
+            )}
           </div>
         </div>
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -270,17 +279,17 @@ export default function TripsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {isLoading && (
+              {tripsLoading && (
                 <tr>
                   <td colSpan={tableColumnCount} className="px-5 py-6 text-center text-sm text-slate-500">
                     여행 정보를 불러오는 중입니다.
                   </td>
                 </tr>
               )}
-              {!isLoading && filteredTrips.length === 0 && (
+              {!tripsLoading && filteredTrips.length === 0 && (
                 <tr>
                   <td colSpan={tableColumnCount} className="px-5 py-6 text-center text-sm text-slate-500">
-                    조건에 해당하는 여행이 없습니다.
+                    {emptyTableMessage}
                   </td>
                 </tr>
               )}

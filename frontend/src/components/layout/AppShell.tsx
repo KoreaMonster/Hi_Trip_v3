@@ -6,18 +6,16 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Bell,
   CalendarDays,
-  Compass,
+  HeartPulse,
   LayoutDashboard,
   LifeBuoy,
-  ListChecks,
   LogOut,
-  MapPin,
   Menu,
+  Plane,
   Settings,
+  ShieldCheck,
   Sparkles,
-  UserCircle2,
   Users,
-  Workflow,
   type LucideIcon,
 } from 'lucide-react';
 import { postLogout } from '@/lib/api';
@@ -29,18 +27,22 @@ interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
+  group?: 'pre' | 'mid';
+  placement?: 'top' | 'bottom';
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { href: '/', label: '대시보드', icon: LayoutDashboard },
-  { href: '/trips', label: '여행 관리', icon: MapPin },
-  { href: '/schedules', label: '일정', icon: CalendarDays },
-  { href: '/participants', label: '참가자', icon: Users },
-  { href: '/monitoring', label: '모니터링', icon: Workflow },
-  { href: '/places', label: '장소 관리', icon: Compass },
-  { href: '/customers', label: '고객 관리', icon: UserCircle2 },
-  { href: '/approvals', label: '승인 요청', icon: ListChecks },
-  { href: '/settings', label: '설정', icon: Settings },
+const BASE_NAV_ITEMS: NavItem[] = [
+  { href: '/', label: '대시보드', icon: LayoutDashboard, placement: 'top' },
+  { href: '/trips', label: '여행 전 여행 관리', icon: Plane, group: 'pre' },
+  { href: '/schedules', label: '여행 전 일정 관리', icon: CalendarDays, group: 'pre' },
+  { href: '/participants', label: '여행 전 고객 관리', icon: Users, group: 'pre' },
+  { href: '/monitoring', label: '여행 중 고객 관리', icon: HeartPulse, group: 'mid' },
+  { href: '/places', label: '여행 중 추천', icon: Sparkles, group: 'mid' },
+  { href: '/settings', label: '설정', icon: Settings, placement: 'bottom' },
+];
+
+const SUPER_ADMIN_NAV_ITEMS: NavItem[] = [
+  { href: '/approvals', label: '승인 센터', icon: ShieldCheck, placement: 'top' },
 ];
 
 export default function AppShell({ children }: { children: ReactNode }) {
@@ -115,10 +117,18 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const availableNavItems = useMemo(() => {
     const role = user?.role ?? profile?.role;
     if (!role || role === 'super_admin') {
-      return NAV_ITEMS;
+      return [...SUPER_ADMIN_NAV_ITEMS, ...BASE_NAV_ITEMS];
     }
-    return NAV_ITEMS.filter((item) => item.href !== '/approvals');
+    return BASE_NAV_ITEMS;
   }, [profile?.role, user?.role]);
+
+  const navSections = useMemo(() => {
+    const top = availableNavItems.filter((item) => item.placement === 'top');
+    const pre = availableNavItems.filter((item) => item.group === 'pre');
+    const mid = availableNavItems.filter((item) => item.group === 'mid');
+    const bottom = availableNavItems.filter((item) => item.placement === 'bottom');
+    return { top, pre, mid, bottom };
+  }, [availableNavItems]);
 
   const currentTitle = useMemo(() => {
     const matched = availableNavItems.find((item) =>
@@ -232,7 +242,25 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        <nav className="flex flex-col gap-1 px-4 py-4 text-sm">{availableNavItems.map(renderNav)}</nav>
+        <nav className="flex h-full flex-col gap-6 px-4 py-4 text-sm">
+          <div className="flex flex-col gap-1">{navSections.top.map(renderNav)}</div>
+
+          {navSections.pre.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <p className="px-3 text-xs font-semibold uppercase tracking-widest text-slate-400">여행 전 관리</p>
+              <div className="flex flex-col gap-1">{navSections.pre.map(renderNav)}</div>
+            </div>
+          )}
+
+          {navSections.mid.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <p className="px-3 text-xs font-semibold uppercase tracking-widest text-slate-400">여행 중 관리</p>
+              <div className="flex flex-col gap-1">{navSections.mid.map(renderNav)}</div>
+            </div>
+          )}
+
+          <div className="mt-auto flex flex-col gap-1 border-t border-slate-100 pt-4">{navSections.bottom.map(renderNav)}</div>
+        </nav>
 
         <div className="mt-auto px-6 py-6">
           <div className="rounded-xl border border-slate-200 bg-[#E8F1FF] p-4 text-sm text-slate-600">

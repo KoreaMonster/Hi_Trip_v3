@@ -8,7 +8,6 @@ import {
   useMonitoringLatestQuery,
   usePlacesQuery,
   useSchedulesQuery,
-  useTripsQuery,
 } from '@/lib/queryHooks';
 import type { Schedule } from '@/types/api';
 import {
@@ -21,6 +20,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import BookingTrendChart, { type BookingTrendPoint } from './BookingTrendChart';
+import { useScopedTrips } from '@/lib/useScopedTrips';
 
 const summaryCards = [
   {
@@ -76,8 +76,8 @@ const formatTripRange = (start?: string | null, end?: string | null) => {
 const formatShortTime = (value: string) => `${value.slice(0, 5)}`;
 
 export default function DashboardContent() {
-  const { data: trips } = useTripsQuery();
-  const activeTrip = trips?.[0];
+  const { data: trips } = useScopedTrips();
+  const activeTrip = trips[0];
   const activeTripId = activeTrip?.id;
 
   const { data: schedules } = useSchedulesQuery(activeTripId);

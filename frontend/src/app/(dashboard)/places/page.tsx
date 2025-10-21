@@ -1,9 +1,21 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowUpRight, Clock4, Compass, Filter, Locate, MapPin, Navigation, Search, Sparkles, Stars } from 'lucide-react';
-import { useCategoriesQuery, usePlacesQuery } from '@/lib/queryHooks';
+import {
+  ChevronDown,
+  Clock4,
+  Compass,
+  Filter,
+  Locate,
+  MapPin,
+  Navigation,
+  RefreshCw,
+  Search,
+  Sparkles,
+  Stars,
+} from 'lucide-react';
+import { useCategoriesQuery, usePlacesQuery, useSchedulesQuery } from '@/lib/queryHooks';
+import { useScopedTrips } from '@/lib/useScopedTrips';
 import type { Place, PlaceAlternativeInfo } from '@/types/api';
 
 const parseAlternative = (
@@ -46,9 +58,18 @@ const buildDescriptionLines = (text?: string | null) => {
 export default function PlacesPage() {
   const { data: places = [], isLoading } = usePlacesQuery();
   const { data: categories = [] } = useCategoriesQuery();
+  const {
+    data: trips = [],
+    isLoading: tripsLoading,
+    isSuperAdmin,
+  } = useScopedTrips();
   const [selectedCategory, setSelectedCategory] = useState<'all' | number>('all');
   const [keyword, setKeyword] = useState('');
   const [activePlaceId, setActivePlaceId] = useState<number | null>(null);
+  const [selectedTripId, setSelectedTripId] = useState<number | null>(null);
+  const { data: schedules = [], isLoading: schedulesLoading } = useSchedulesQuery(selectedTripId ?? undefined, {
+    enabled: typeof selectedTripId === 'number',
+  });
 
   const categoryOptions = useMemo(() => {
     const unique = new Map<number, string>();
@@ -76,6 +97,19 @@ export default function PlacesPage() {
     }
   }, [categoryOptions, selectedCategory]);
 
+  useEffect(() => {
+    if (trips.length === 0) {
+      if (selectedTripId !== null) {
+        setSelectedTripId(null);
+      }
+      return;
+    }
+
+    if (selectedTripId === null || !trips.some((trip) => trip.id === selectedTripId)) {
+      setSelectedTripId(trips[0].id);
+    }
+  }, [selectedTripId, trips]);
+
   const filtered = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLowerCase();
     return places.filter((place) => {
@@ -89,34 +123,90 @@ export default function PlacesPage() {
     });
   }, [places, selectedCategory, keyword]);
 
+  const recommendedPlaces = useMemo(() => filtered.slice(0, 6), [filtered]);
+
   useEffect(() => {
-    if (filtered.length === 0) {
+    if (recommendedPlaces.length === 0) {
       setActivePlaceId(null);
       return;
     }
     setActivePlaceId((prev) => {
-      if (prev && filtered.some((place) => place.id === prev)) {
+      if (prev && recommendedPlaces.some((place) => place.id === prev)) {
         return prev;
       }
-      return filtered[0]?.id ?? null;
+      return recommendedPlaces[0]?.id ?? null;
     });
-  }, [filtered]);
+  }, [recommendedPlaces]);
 
   const activePlace = useMemo(
-    () => filtered.find((place) => place.id === activePlaceId) ?? null,
-    [filtered, activePlaceId],
+    () => recommendedPlaces.find((place) => place.id === activePlaceId) ?? null,
+    [recommendedPlaces, activePlaceId],
   );
+
+  const selectedTrip = useMemo(() => trips.find((trip) => trip.id === selectedTripId) ?? null, [trips, selectedTripId]);
+  const canSelectTrip = trips.length > 1;
+  const noTripMessage = isSuperAdmin ? '등록된 여행이 없습니다.' : '담당된 여행이 없습니다.';
+
+  const sortedSchedules = useMemo(() => {
+    return [...schedules].sort((a, b) => {
+      if (a.day_number !== b.day_number) {
+        return a.day_number - b.day_number;
+      }
+      return a.start_time.localeCompare(b.start_time);
+    });
+  }, [schedules]);
 
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">장소 라이브러리</p>
-            <h1 className="mt-1 text-2xl font-bold text-slate-900">추천 장소 & 담당자 메모</h1>
-            <p className="mt-1 text-sm text-slate-500">여행 일정에 활용할 장소를 검색하고 대체 옵션을 준비하세요.</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">여행 중 추천</p>
+            <h1 className="mt-1 text-2xl font-bold text-slate-900">AI 기반 장소 추천</h1>
+            <p className="mt-1 text-sm text-slate-500">선택한 여행 일정에 맞춘 장소를 탐색하고 대체 옵션까지 준비하세요.</p>
+            {selectedTrip && (
+              <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
+                <Navigation className="h-3.5 w-3.5" /> {selectedTrip.title} · {selectedTrip.destination}
+              </div>
+            )}
+            {!selectedTrip && (
+              <div className="mt-3 inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+                {tripsLoading ? '여행 정보를 불러오는 중입니다.' : noTripMessage}
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            {canSelectTrip ? (
+              <div className="relative">
+                <select
+                  value={selectedTripId ?? ''}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    if (Number.isNaN(value)) {
+                      setSelectedTripId(null);
+                      return;
+                    }
+                    setSelectedTripId(value);
+                  }}
+                  className="appearance-none rounded-full border border-slate-200 bg-white px-4 py-2 pr-10 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus:border-primary-300 focus:outline-none"
+                >
+                  {trips.map((trip) => (
+                    <option key={trip.id} value={trip.id}>
+                      {trip.title}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              </div>
+            ) : selectedTrip ? (
+              <span className="inline-flex items-center gap-2 rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
+                <Navigation className="h-3.5 w-3.5" /> {selectedTrip.title}
+              </span>
+            ) : (
+              <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+                {tripsLoading ? '여행 정보를 불러오는 중입니다.' : noTripMessage}
+              </span>
+            )}
             <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-500 shadow-sm">
               <Search className="h-4 w-4 text-primary-500" />
               <input
@@ -153,51 +243,132 @@ export default function PlacesPage() {
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.6fr_1.4fr] 2xl:grid-cols-[1.7fr_1.3fr]">
-        <article className="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:grid-cols-2 xl:grid-cols-3">
-          {isLoading && (
-            <div className="col-span-full rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-              장소 정보를 불러오는 중입니다.
+      <section className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+          <div className="flex-1 space-y-5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">추천 장소 리스트</h2>
+                <p className="text-sm text-slate-500">AI가 선정한 우선 방문 장소를 확인해 보세요.</p>
+              </div>
+              <span className="inline-flex items-center gap-2 rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
+                총 {recommendedPlaces.length}곳
+              </span>
             </div>
-          )}
-          {!isLoading && filtered.length === 0 && (
-            <div className="col-span-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-              조건에 맞는 장소가 없습니다.
+            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+              {isLoading && (
+                <div className="col-span-full rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                  장소 정보를 불러오는 중입니다.
+                </div>
+              )}
+              {!isLoading && recommendedPlaces.length === 0 && (
+                <div className="col-span-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                  조건에 맞는 추천 장소가 없습니다.
+                </div>
+              )}
+              {recommendedPlaces.map((place) => (
+                <PlaceCard
+                  key={place.id}
+                  place={place}
+                  isActive={place.id === activePlaceId}
+                  onSelect={() => setActivePlaceId(place.id)}
+                />
+              ))}
             </div>
-          )}
-          {filtered.map((place) => (
-            <PlaceCard
-              key={place.id}
-              place={place}
-              isActive={place.id === activePlaceId}
-              onSelect={() => setActivePlaceId(place.id)}
-            />
-          ))}
-        </article>
-
-        <aside className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <PlaceDetailsPanel place={activePlace} />
-
-          <div className="space-y-3 rounded-2xl border border-slate-100 bg-[#F9FBFF] p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-              <Stars className="h-4 w-4 text-primary-500" /> 담당자 메모
-            </div>
-            <ul className="space-y-2 text-xs text-slate-600">
-              <li className="flex items-start gap-2">
-                <Sparkles className="mt-0.5 h-3.5 w-3.5 text-primary-400" /> VIP 고객 방문 시 환영 배너를 미리 준비하세요.
-              </li>
-              <li className="flex items-start gap-2">
-                <Clock4 className="mt-0.5 h-3.5 w-3.5 text-primary-400" /> 야외 이동 동선은 일몰 30분 전까지 점검이 필요합니다.
-              </li>
-              <li className="flex items-start gap-2">
-                <Locate className="mt-0.5 h-3.5 w-3.5 text-primary-400" /> 비상 대체 장소 리스트를 최신으로 유지해 주세요.
-              </li>
-            </ul>
-            <button className="inline-flex items-center justify-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-4 py-2 text-xs font-semibold text-primary-600 transition hover:bg-primary-100">
-              <MapPin className="h-4 w-4" /> 장소 추천 요청
-            </button>
+            {filtered.length > recommendedPlaces.length && (
+              <p className="text-xs text-slate-400">
+                추가 후보 {filtered.length - recommendedPlaces.length}곳은 필터를 조정해 확인할 수 있습니다.
+              </p>
+            )}
           </div>
-        </aside>
+
+          <aside className="w-full max-w-xl space-y-5 xl:w-[360px]">
+            <PlaceDetailsPanel place={activePlace} />
+
+            <div className="space-y-3 rounded-2xl border border-slate-100 bg-[#F9FBFF] p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                <Stars className="h-4 w-4 text-primary-500" /> 담당자 메모
+              </div>
+              <ul className="space-y-2 text-xs text-slate-600">
+                <li className="flex items-start gap-2">
+                  <Sparkles className="mt-0.5 h-3.5 w-3.5 text-primary-400" /> VIP 고객 방문 시 환영 배너를 미리 준비하세요.
+                </li>
+                <li className="flex items-start gap-2">
+                  <Clock4 className="mt-0.5 h-3.5 w-3.5 text-primary-400" /> 야외 이동 동선은 일몰 30분 전까지 점검이 필요합니다.
+                </li>
+                <li className="flex items-start gap-2">
+                  <Locate className="mt-0.5 h-3.5 w-3.5 text-primary-400" /> 비상 대체 장소 리스트를 최신으로 유지해 주세요.
+                </li>
+              </ul>
+              <button className="inline-flex items-center justify-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-4 py-2 text-xs font-semibold text-primary-600 transition hover:bg-primary-100">
+                <MapPin className="h-4 w-4" /> 장소 추천 요청
+              </button>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">여행 일정 비교</p>
+            <h2 className="mt-1 text-lg font-semibold text-slate-900">실제 일정 타임라인</h2>
+            <p className="text-sm text-slate-500">추천 장소를 실제 투어 일정과 비교하며 최종 동선을 확정하세요.</p>
+          </div>
+          <button className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600">
+            <RefreshCw className="h-4 w-4" /> AI 추천 다시 받기
+          </button>
+        </div>
+
+        <div className="mt-6 overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-100 text-sm">
+            <thead className="bg-[#F7F9FC] text-slate-500">
+              <tr>
+                <th className="px-4 py-3 text-left font-semibold">일차</th>
+                <th className="px-4 py-3 text-left font-semibold">시간</th>
+                <th className="px-4 py-3 text-left font-semibold">일정</th>
+                <th className="px-4 py-3 text-left font-semibold">이동 수단</th>
+                <th className="px-4 py-3 text-left font-semibold">집결지</th>
+                <th className="px-4 py-3 text-right font-semibold">예산</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {schedulesLoading && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
+                    일정을 불러오는 중입니다.
+                  </td>
+                </tr>
+              )}
+              {!schedulesLoading && sortedSchedules.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
+                    선택한 여행에 등록된 일정이 없습니다.
+                  </td>
+                </tr>
+              )}
+              {sortedSchedules.map((schedule) => (
+                <tr key={schedule.id} className="transition hover:bg-slate-50/70">
+                  <td className="px-4 py-3 font-semibold text-slate-800">DAY {schedule.day_number}</td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {schedule.start_time.slice(0, 5)} ~ {schedule.end_time.slice(0, 5)}
+                  </td>
+                  <td className="px-4 py-3 text-slate-700">
+                    <div className="font-semibold text-slate-900">
+                      {schedule.main_content ?? schedule.place_name ?? '세부 일정 미정'}
+                    </div>
+                    <div className="text-xs text-slate-400">#{schedule.order.toString().padStart(2, '0')}</div>
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">{schedule.transport ?? '미정'}</td>
+                  <td className="px-4 py-3 text-slate-600">{schedule.meeting_point ?? '집결지 미정'}</td>
+                  <td className="px-4 py-3 text-right text-slate-700">
+                    {schedule.budget ? `${schedule.budget.toLocaleString()}원` : '-'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );
@@ -205,18 +376,10 @@ export default function PlacesPage() {
 
 function PlaceCard({ place, isActive, onSelect }: { place: Place; isActive: boolean; onSelect: () => void }) {
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      aria-pressed={isActive}
+    <button
+      type="button"
       onClick={onSelect}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          onSelect();
-        }
-      }}
-      className={`group cursor-pointer overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition hover:-translate-y-1 hover:shadow-lg ${
+      className={`group overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition hover:-translate-y-1 hover:shadow-lg ${
         isActive ? 'border-primary-300 ring-2 ring-primary-200 ring-offset-2' : 'border-slate-200'
       }`}
     >
@@ -250,20 +413,8 @@ function PlaceCard({ place, isActive, onSelect }: { place: Place; isActive: bool
           </p>
         )}
         <p className="text-xs font-semibold text-primary-600">{place.ai_meeting_point ?? '집결지 미정'}</p>
-        <div className="flex items-center justify-between text-xs">
-          <span className="rounded-full bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-500">
-            업데이트 {new Date(place.updated_at).toLocaleDateString('ko-KR')}
-          </span>
-          <Link
-            href={`/places/${place.id}`}
-            onClick={(event) => event.stopPropagation()}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-primary-600 hover:text-primary-700"
-          >
-            상세 보기 <ArrowUpRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -287,17 +438,9 @@ function PlaceDetailsPanel({ place }: { place: Place | null }) {
             <h2 className="text-lg font-semibold text-slate-900">일정 장소 정보</h2>
             <p className="text-xs text-slate-500">담당자와 공유할 기본 정보를 확인하세요.</p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
-              <Compass className="h-3.5 w-3.5" /> {place.category?.name ?? '미분류'}
-            </span>
-            <Link
-              href={`/places/${place.id}`}
-              className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-primary-200 hover:text-primary-600"
-            >
-              상세 페이지 <ArrowUpRight className="h-3 w-3" />
-            </Link>
-          </div>
+          <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
+            <Compass className="h-3.5 w-3.5" /> {place.category?.name ?? '미분류'}
+          </span>
         </header>
 
         <div className="grid gap-3 px-5 py-4 text-sm">
