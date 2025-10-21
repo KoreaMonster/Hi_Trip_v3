@@ -114,12 +114,20 @@ export default function AppShell({ children }: { children: ReactNode }) {
     return compact.charAt(0).toUpperCase();
   }, [profile?.full_name_kr, user?.full_name_kr]);
 
+  const availableNavItems = useMemo(() => {
+    const role = user?.role ?? profile?.role;
+    if (!role || role === 'super_admin') {
+      return NAV_ITEMS;
+    }
+    return NAV_ITEMS.filter((item) => item.href !== '/approvals');
+  }, [profile?.role, user?.role]);
+
   const currentTitle = useMemo(() => {
-    const matched = NAV_ITEMS.find((item) =>
+    const matched = availableNavItems.find((item) =>
       item.href === '/' ? pathname === '/' : pathname.startsWith(item.href),
     );
     return matched?.label ?? 'HI-TRIP 운영센터';
-  }, [pathname]);
+  }, [availableNavItems, pathname]);
 
   const renderNav = (item: NavItem) => {
     const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
@@ -226,7 +234,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        <nav className="flex flex-col gap-1 px-4 py-4 text-sm">{NAV_ITEMS.map(renderNav)}</nav>
+        <nav className="flex flex-col gap-1 px-4 py-4 text-sm">{availableNavItems.map(renderNav)}</nav>
 
         <div className="mt-auto px-6 py-6">
           <div className="rounded-xl border border-slate-200 bg-[#E8F1FF] p-4 text-sm text-slate-600">

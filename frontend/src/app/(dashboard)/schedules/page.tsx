@@ -122,14 +122,26 @@ export default function SchedulesPage() {
       return;
     }
 
+    const normalizedStart = normalizeTime(form.start_time);
+    const normalizedEnd = normalizeTime(form.end_time);
+    const dayNumber = Number(form.day_number) || 1;
+
+    const sameDaySchedules = schedules.filter((schedule) => schedule.day_number === dayNumber);
+
+    const nextOrder = sameDaySchedules.reduce((order, schedule) => {
+      const candidate = typeof schedule.order === 'number' ? schedule.order : 0;
+      return Math.max(order, candidate);
+    }, 0);
+
     const payload: ScheduleCreate = {
-      day_number: Number(form.day_number) || 1,
-      start_time: normalizeTime(form.start_time),
-      end_time: normalizeTime(form.end_time),
+      day_number: dayNumber,
+      start_time: normalizedStart,
+      end_time: normalizedEnd,
       main_content: form.main_content.trim() || null,
       meeting_point: form.meeting_point.trim() || null,
       transport: form.transport.trim() || null,
       budget: form.budget ? Number(form.budget) : null,
+      order: nextOrder + 1,
     };
 
     setIsSubmitting(true);

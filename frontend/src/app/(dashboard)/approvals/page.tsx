@@ -1,17 +1,50 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { CheckCircle, Shield, UserPlus } from 'lucide-react';
 import { approveStaff } from '@/lib/api';
 import { usePendingStaffQuery } from '@/lib/queryHooks';
+import { useUserStore } from '@/stores/useUserStore';
 
 export default function ApprovalsPage() {
+  const router = useRouter();
+  const { user } = useUserStore();
+  const isSuperAdmin = user?.role === 'super_admin';
   const queryClient = useQueryClient();
-  const { data: pending = [], isLoading } = usePendingStaffQuery();
+  const { data: pending = [], isLoading } = usePendingStaffQuery({ enabled: isSuperAdmin });
   const [approvedIds, setApprovedIds] = useState<number[]>([]);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user && !isSuperAdmin) {
+      router.replace('/');
+    }
+  }, [user, isSuperAdmin, router]);
+
+  if (!user) {
+    return (
+      <div className="rounded-3xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
+        <p className="text-sm font-semibold text-primary-500">권한 확인 중</p>
+        <p className="mt-2 text-sm text-slate-500">승인 센터 접근 권한을 확인하고 있습니다.</p>
+      </div>
+    );
+  }
+
+  if (!isSuperAdmin) {
+    return (
+      <div className="space-y-6">
+        <section className="rounded-3xl border border-amber-200 bg-amber-50 px-6 py-6 text-amber-700 shadow-sm">
+          <h1 className="text-xl font-semibold">접근 권한이 없습니다</h1>
+          <p className="mt-2 text-sm">
+            승인 요청 관리는 총괄관리자 전용 메뉴입니다. 필요한 경우 운영팀에 권한을 요청해 주세요.
+          </p>
+        </section>
+      </div>
+    );
+  }
 
   const handleApprove = async (id: number) => {
     try {

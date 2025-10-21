@@ -160,6 +160,14 @@ export type PlaceCategory = {
   created_at: string;
 };
 
+export type PlaceAlternativeInfo = {
+  place_name?: string;
+  reason?: string;
+  distance_text?: string;
+  eta_minutes?: number;
+  [key: string]: unknown;
+};
+
 export type Place = {
   id: number;
   name: string;
@@ -168,14 +176,14 @@ export type Place = {
   category_id?: number | null;
   entrance_fee?: number | null;
   activity_time?: string | null;
-  ai_alternative_place?: unknown;
+  ai_alternative_place?: PlaceAlternativeInfo | string | null;
   ai_generated_info?: string | null;
   ai_meeting_point?: string | null;
   image?: string | null;
   entrance_fee_display?: string | null;
   activity_time_display?: string | null;
   has_image?: boolean;
-  alternative_place_info?: Record<string, unknown> | null;
+  alternative_place_info?: PlaceAlternativeInfo | null;
   created_at: string;
   updated_at: string;
 };
