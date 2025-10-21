@@ -18,34 +18,63 @@ import {
   UserRound,
 } from 'lucide-react';
 
-import { usePlaceDetailQuery, usePlaceCoordinatorsQuery } from '@/lib/queryHooks';
-import type { Place, PlaceAlternativeInfo } from '@/types/api';
+import { mergeAlternativeInfo } from '@/lib/alternativePlace';
+import {
+  usePlaceDetailQuery,
+  usePlaceCoordinatorsQuery,
+  usePlaceSummaryCardQuery,
+} from '@/lib/queryHooks';
+import type { Place } from '@/types/api';
 
-const parseAlternative = (
-  info: Place['alternative_place_info'] | Place['ai_alternative_place'],
-): PlaceAlternativeInfo | null => {
-  if (!info) return null;
-  if (typeof info === 'object') return info as PlaceAlternativeInfo;
-  try {
-    const parsed = JSON.parse(info);
-    return typeof parsed === 'object' && parsed ? (parsed as PlaceAlternativeInfo) : null;
-  } catch (error) {
-    return null;
+const deriveDescriptionLines = (
+  input?: string | string[] | null,
+  limit = 8,
+) => {
+  if (!input) return [] as string[];
+
+  if (Array.isArray(input)) {
+    return input
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .filter((value) => value.length > 0)
+      .slice(0, limit);
   }
-};
 
-const buildDescriptionLines = (text?: string | null) => {
-  if (!text) return [] as string[];
-  const lines = text
+  const trimmed = input.trim();
+  if (!trimmed) return [] as string[];
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) {
+      const normalized = parsed
+        .map((value) => (typeof value === 'string' ? value.trim() : ''))
+        .filter((value) => value.length > 0);
+      if (normalized.length > 0) {
+        return normalized.slice(0, limit);
+      }
+    }
+    if (typeof parsed === 'object' && parsed !== null) {
+      const aggregated = Object.values(parsed)
+        .flat()
+        .map((value) => (typeof value === 'string' ? value.trim() : ''))
+        .filter((value) => value.length > 0);
+      if (aggregated.length > 0) {
+        return aggregated.slice(0, limit);
+      }
+    }
+  } catch (error) {
+    // JSON 파싱에 실패하면 기존 로직을 사용합니다.
+  }
+
+  const lines = trimmed
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
-  if (lines.length >= 4) return lines.slice(0, 8);
-  return text
+  if (lines.length >= 4) return lines.slice(0, limit);
+  return trimmed
     .split(/(?<=[.!?])\s+/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
-    .slice(0, 8);
+    .slice(0, limit);
 };
 
 const formatDate = (value?: string | null) => {
@@ -64,6 +93,7 @@ export default function PlaceDetailPage() {
   const { data: place, isLoading, isError } = usePlaceDetailQuery(resolvedPlaceId);
   const { data: coordinators = [], isLoading: isCoordinatorsLoading } =
     usePlaceCoordinatorsQuery(resolvedPlaceId);
+  const { data: summaryCard } = usePlaceSummaryCardQuery(resolvedPlaceId);
 
   if (!resolvedPlaceId) {
     return (
@@ -92,8 +122,10 @@ export default function PlaceDetailPage() {
     );
   }
 
-  const descriptionLines = buildDescriptionLines(place.ai_generated_info);
-  const alternative = parseAlternative(place.alternative_place_info ?? place.ai_alternative_place);
+  const descriptionLines = summaryCard?.generated_lines?.length
+    ? summaryCard.generated_lines.slice(0, 8)
+    : deriveDescriptionLines(place.ai_generated_info);
+  const alternative = mergeAlternativeInfo(place.alternative_place_info, place.ai_alternative_place);
 
   return (
     <div className="space-y-6">
@@ -166,6 +198,11 @@ export default function PlaceDetailPage() {
                 {typeof alternative.eta_minutes === 'number' && (
                   <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 font-semibold text-slate-600">
                     <Clock4 className="h-3 w-3" /> 이동 {alternative.eta_minutes}분 예상
+                  </span>
+                )}
+                {alternative.delta_text && (
+                  <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 font-semibold text-slate-600">
+                    <Navigation className="h-3 w-3" /> 경로 차이 {alternative.delta_text}
                   </span>
                 )}
               </div>

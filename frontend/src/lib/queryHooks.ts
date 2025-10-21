@@ -13,11 +13,13 @@ import {
   listParticipants,
   listPlaceCoordinators,
   getPlaceDetail,
+  getPlaceSummaryCard,
   listPendingStaff,
   listPlaces,
   listSchedules,
   listStaff,
   listTrips,
+  postPlaceAlternatives,
 } from '@/lib/api';
 import type {
   HealthResponse,
@@ -25,8 +27,11 @@ import type {
   ParticipantHistory,
   ParticipantLatest,
   Place,
+  PlaceAlternativesRequest,
+  PlaceAlternativesResponse,
   PlaceCoordinator,
   PlaceCategory,
+  PlaceSummaryCard,
   ProfileResponse,
   Schedule,
   Trip,
@@ -137,6 +142,30 @@ export const usePlaceDetailQuery = (placeId?: number, options?: BaseOptions<Plac
     queryFn: () => getPlaceDetail(placeId!),
     enabled: typeof placeId === 'number',
     staleTime: 1000 * 60 * 10,
+    ...options,
+  });
+
+export const usePlaceSummaryCardQuery = (
+  placeId?: number,
+  options?: BaseOptions<PlaceSummaryCard>,
+) =>
+  useQuery({
+    queryKey: ['places', placeId, 'summary-card'],
+    queryFn: () => getPlaceSummaryCard(placeId!),
+    enabled: typeof placeId === 'number',
+    staleTime: 1000 * 60 * 30,
+    ...options,
+  });
+
+export const usePlaceAlternativesQuery = (
+  params?: PlaceAlternativesRequest | null,
+  options?: BaseOptions<PlaceAlternativesResponse>,
+) =>
+  useQuery({
+    queryKey: ['places', 'alternatives', params],
+    queryFn: () => postPlaceAlternatives(params!),
+    enabled: Boolean(params),
+    staleTime: 0,
     ...options,
   });
 
