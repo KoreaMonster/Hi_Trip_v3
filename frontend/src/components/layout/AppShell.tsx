@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Bell,
   CalendarDays,
-  ClipboardCheck,
   Compass,
   LayoutDashboard,
   LifeBuoy,
@@ -40,7 +39,6 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/monitoring', label: '모니터링', icon: Workflow },
   { href: '/places', label: '장소 관리', icon: Compass },
   { href: '/customers', label: '고객 관리', icon: UserCircle2 },
-  { href: '/checklists', label: '체크리스트', icon: ClipboardCheck },
   { href: '/approvals', label: '승인 요청', icon: ListChecks },
   { href: '/settings', label: '설정', icon: Settings },
 ];
