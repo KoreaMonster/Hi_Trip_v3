@@ -202,6 +202,12 @@ export type PlaceAlternativeInfo = {
   reason?: string;
   distance_text?: string;
   eta_minutes?: number;
+  place_id?: string;
+  delta_text?: string;
+  total_duration_text?: string;
+  total_duration_seconds?: number;
+  delta_seconds?: number;
+  hint_url?: string;
   [key: string]: unknown;
 };
 

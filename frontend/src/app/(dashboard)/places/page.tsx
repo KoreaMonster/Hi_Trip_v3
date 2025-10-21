@@ -20,38 +20,9 @@ import {
   usePlacesQuery,
   useSchedulesQuery,
 } from '@/lib/queryHooks';
+import { mergeAlternativeInfo } from '@/lib/alternativePlace';
 import { useScopedTrips } from '@/lib/useScopedTrips';
-import type { Place, PlaceAlternativeInfo } from '@/types/api';
-
-const normalizeAlternativeInfo = (
-  value: Place['alternative_place_info'] | Place['ai_alternative_place'],
-): PlaceAlternativeInfo | null => {
-  if (!value) return null;
-  if (typeof value === 'string') {
-    try {
-      const parsed = JSON.parse(value);
-      return typeof parsed === 'object' && parsed ? (parsed as PlaceAlternativeInfo) : null;
-    } catch (error) {
-      return null;
-    }
-  }
-  if (typeof value === 'object') {
-    return value as PlaceAlternativeInfo;
-  }
-  return null;
-};
-
-const parseAlternative = (
-  info: Place['alternative_place_info'],
-  fallback: Place['ai_alternative_place'],
-): PlaceAlternativeInfo | null => {
-  const normalized = normalizeAlternativeInfo(info);
-  const fallbackInfo = normalizeAlternativeInfo(fallback);
-  if (normalized && fallbackInfo) {
-    return { ...fallbackInfo, ...normalized };
-  }
-  return normalized ?? fallbackInfo;
-};
+import type { Place } from '@/types/api';
 
 const buildDescriptionLines = (text?: string | null) => {
   if (!text) return [] as string[];
@@ -508,7 +479,7 @@ function PlaceDetailsPanel({
   }
 
   const descriptionLines = buildDescriptionLines(resolvedPlace.ai_generated_info);
-  const alternative = parseAlternative(
+  const alternative = mergeAlternativeInfo(
     resolvedPlace.alternative_place_info,
     resolvedPlace.ai_alternative_place,
   );
@@ -576,6 +547,11 @@ function PlaceDetailsPanel({
               {typeof alternative.eta_minutes === 'number' && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-slate-600 shadow-sm">
                   <Clock4 className="h-3 w-3" /> 이동 {alternative.eta_minutes}분 예상
+                </span>
+              )}
+              {alternative.delta_text && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-slate-600 shadow-sm">
+                  <Navigation className="h-3 w-3" /> 경로 차이 {alternative.delta_text}
                 </span>
               )}
             </div>

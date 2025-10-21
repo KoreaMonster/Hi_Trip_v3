@@ -18,38 +18,9 @@ import {
   UserRound,
 } from 'lucide-react';
 
+import { mergeAlternativeInfo } from '@/lib/alternativePlace';
 import { usePlaceDetailQuery, usePlaceCoordinatorsQuery } from '@/lib/queryHooks';
-import type { Place, PlaceAlternativeInfo } from '@/types/api';
-
-const normalizeAlternativeInfo = (
-  value: Place['alternative_place_info'] | Place['ai_alternative_place'],
-): PlaceAlternativeInfo | null => {
-  if (!value) return null;
-  if (typeof value === 'string') {
-    try {
-      const parsed = JSON.parse(value);
-      return typeof parsed === 'object' && parsed ? (parsed as PlaceAlternativeInfo) : null;
-    } catch (error) {
-      return null;
-    }
-  }
-  if (typeof value === 'object') {
-    return value as PlaceAlternativeInfo;
-  }
-  return null;
-};
-
-const parseAlternative = (
-  info: Place['alternative_place_info'],
-  fallback: Place['ai_alternative_place'],
-): PlaceAlternativeInfo | null => {
-  const normalized = normalizeAlternativeInfo(info);
-  const fallbackInfo = normalizeAlternativeInfo(fallback);
-  if (normalized && fallbackInfo) {
-    return { ...fallbackInfo, ...normalized };
-  }
-  return normalized ?? fallbackInfo;
-};
+import type { Place } from '@/types/api';
 
 const buildDescriptionLines = (text?: string | null) => {
   if (!text) return [] as string[];
@@ -137,7 +108,7 @@ export default function PlaceDetailPage() {
   }
 
   const descriptionLines = buildDescriptionLines(place.ai_generated_info);
-  const alternative = parseAlternative(place.alternative_place_info, place.ai_alternative_place);
+  const alternative = mergeAlternativeInfo(place.alternative_place_info, place.ai_alternative_place);
 
   return (
     <div className="space-y-6">
@@ -210,6 +181,11 @@ export default function PlaceDetailPage() {
                 {typeof alternative.eta_minutes === 'number' && (
                   <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 font-semibold text-slate-600">
                     <Clock4 className="h-3 w-3" /> 이동 {alternative.eta_minutes}분 예상
+                  </span>
+                )}
+                {alternative.delta_text && (
+                  <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 font-semibold text-slate-600">
+                    <Navigation className="h-3 w-3" /> 경로 차이 {alternative.delta_text}
                   </span>
                 )}
               </div>
