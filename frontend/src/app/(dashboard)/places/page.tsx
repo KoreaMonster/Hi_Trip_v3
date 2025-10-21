@@ -16,18 +16,30 @@ import {
 } from 'lucide-react';
 import {
   useCategoriesQuery,
+  usePlaceAlternativesQuery,
   usePlaceDetailQuery,
+  usePlaceSummaryCardQuery,
   usePlacesQuery,
   useSchedulesQuery,
 } from '@/lib/queryHooks';
-import { mergeAlternativeInfo } from '@/lib/alternativePlace';
+import { mergeAlternativeInfo, normalizeAlternativeInfo } from '@/lib/alternativePlace';
 import { useScopedTrips } from '@/lib/useScopedTrips';
-import type { Place } from '@/types/api';
+import type { Place, PlaceAlternativesRequest, Schedule } from '@/types/api';
 
-const buildDescriptionLines = (text?: string | null) => {
-  if (!text) return [] as string[];
+const deriveDescriptionLines = (
+  input?: string | string[] | null,
+  limit = 6,
+) => {
+  if (!input) return [] as string[];
 
-  const trimmed = text.trim();
+  if (Array.isArray(input)) {
+    return input
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .filter((value) => value.length > 0)
+      .slice(0, limit);
+  }
+
+  const trimmed = input.trim();
   if (!trimmed) return [] as string[];
 
   try {
@@ -37,7 +49,7 @@ const buildDescriptionLines = (text?: string | null) => {
         .map((value) => (typeof value === 'string' ? value.trim() : ''))
         .filter((value) => value.length > 0);
       if (normalized.length > 0) {
-        return normalized.slice(0, 6);
+        return normalized.slice(0, limit);
       }
     }
     if (typeof parsed === 'object' && parsed !== null) {
@@ -46,7 +58,7 @@ const buildDescriptionLines = (text?: string | null) => {
         .map((value) => (typeof value === 'string' ? value.trim() : ''))
         .filter((value) => value.length > 0);
       if (aggregated.length > 0) {
-        return aggregated.slice(0, 6);
+        return aggregated.slice(0, limit);
       }
     }
   } catch (error) {
@@ -59,14 +71,37 @@ const buildDescriptionLines = (text?: string | null) => {
     .filter((line) => line.length > 0);
 
   if (lines.length >= 4) {
-    return lines.slice(0, 6);
+    return lines.slice(0, limit);
   }
 
   return trimmed
     .split(/(?<=[.!?])\s+/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
-    .slice(0, 6);
+    .slice(0, limit);
+};
+
+const deriveTravelMode = (
+  transport?: string | null,
+): PlaceAlternativesRequest['travel_mode'] => {
+  if (!transport) return 'DRIVE';
+  const normalized = transport.trim().toLowerCase();
+  if (!normalized) return 'DRIVE';
+  if (normalized.includes('walk') || normalized.includes('도보')) {
+    return 'WALK';
+  }
+  if (normalized.includes('bike') || normalized.includes('자전거')) {
+    return 'BICYCLE';
+  }
+  if (
+    normalized.includes('transit') ||
+    normalized.includes('버스') ||
+    normalized.includes('지하철') ||
+    normalized.includes('대중')
+  ) {
+    return 'TRANSIT';
+  }
+  return 'DRIVE';
 };
 
 export default function PlacesPage() {
@@ -297,7 +332,11 @@ export default function PlacesPage() {
           </div>
 
           <aside className="w-full max-w-xl space-y-5 xl:w-[360px]">
-            <PlaceDetailsPanel placeId={activePlaceId} fallback={activePlace} />
+            <PlaceDetailsPanel
+              placeId={activePlaceId}
+              fallback={activePlace}
+              schedules={sortedSchedules}
+            />
 
             <div className="space-y-3 rounded-2xl border border-slate-100 bg-[#F9FBFF] p-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
@@ -435,14 +474,19 @@ function PlaceCard({ place, isActive, onSelect }: { place: Place; isActive: bool
 function PlaceDetailsPanel({
   placeId,
   fallback,
+  schedules,
 }: {
   placeId: number | null;
   fallback?: Place | null;
+  schedules: Schedule[];
 }) {
   const hasPlaceId = typeof placeId === 'number';
   const { data: place, isLoading, isError } = usePlaceDetailQuery(placeId ?? undefined, {
     enabled: hasPlaceId,
   });
+  const { data: summaryCard } = usePlaceSummaryCardQuery(
+    hasPlaceId ? placeId ?? undefined : undefined,
+  );
 
   if (!hasPlaceId) {
     return (
@@ -461,6 +505,38 @@ function PlaceDetailsPanel({
   }
 
   const resolvedPlace = place ?? fallback ?? null;
+  const alternativeParams = useMemo<PlaceAlternativesRequest | null>(() => {
+    if (!hasPlaceId || !resolvedPlace?.google_place_id) {
+      return null;
+    }
+    if (!Array.isArray(schedules) || schedules.length === 0) {
+      return null;
+    }
+
+    const currentIndex = schedules.findIndex(
+      (schedule) => schedule.place === resolvedPlace.id,
+    );
+    if (currentIndex === -1) {
+      return null;
+    }
+
+    const previous = schedules[currentIndex - 1];
+    const next = schedules[currentIndex + 1];
+    if (!previous?.place_google_place_id || !next?.place_google_place_id) {
+      return null;
+    }
+
+    return {
+      previous_place_id: previous.place_google_place_id,
+      unavailable_place_id: resolvedPlace.google_place_id,
+      next_place_id: next.place_google_place_id,
+      travel_mode: deriveTravelMode(schedules[currentIndex]?.transport),
+    };
+  }, [hasPlaceId, resolvedPlace, schedules]);
+  const {
+    data: alternativeResponse,
+    isLoading: isAlternativeLoading,
+  } = usePlaceAlternativesQuery(alternativeParams);
 
   if (isLoading && !resolvedPlace) {
     return (
@@ -478,10 +554,22 @@ function PlaceDetailsPanel({
     );
   }
 
-  const descriptionLines = buildDescriptionLines(resolvedPlace.ai_generated_info);
-  const alternative = mergeAlternativeInfo(
+  const descriptionLines = summaryCard?.generated_lines?.length
+    ? summaryCard.generated_lines.slice(0, 6)
+    : deriveDescriptionLines(resolvedPlace.ai_generated_info);
+
+  const storedAlternative = mergeAlternativeInfo(
     resolvedPlace.alternative_place_info,
     resolvedPlace.ai_alternative_place,
+  );
+  const liveAlternative = alternativeResponse?.alternatives?.length
+    ? normalizeAlternativeInfo(alternativeResponse.alternatives[0])
+    : null;
+  const alternative = liveAlternative
+    ? { ...(storedAlternative ?? {}), ...liveAlternative }
+    : storedAlternative;
+  const isAlternativePending = Boolean(
+    alternativeParams && isAlternativeLoading && !alternativeResponse,
   );
 
   return (
@@ -534,7 +622,11 @@ function PlaceDetailsPanel({
           </div>
           <Navigation className="h-4 w-4 text-primary-500" />
         </div>
-        {alternative ? (
+        {isAlternativePending ? (
+          <p className="mt-4 rounded-xl border border-dashed border-primary-200 bg-primary-50 px-3 py-3 text-center text-xs text-primary-600">
+            대체 장소 추천을 불러오는 중입니다.
+          </p>
+        ) : alternative ? (
           <div className="mt-4 space-y-2 rounded-xl border border-slate-100 bg-[#E8F1FF] p-4 text-xs text-slate-700">
             <p className="text-sm font-semibold text-slate-900">{alternative.place_name ?? '이름 미정'}</p>
             {alternative.reason && <p className="leading-relaxed">{alternative.reason}</p>}

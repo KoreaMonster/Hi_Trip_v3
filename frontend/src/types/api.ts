@@ -162,6 +162,7 @@ export type Schedule = {
   trip: number;
   place: number | null;
   place_id?: number | null;
+  place_google_place_id?: string | null;
   day_number: number;
   start_time: string;
   end_time: string;
@@ -215,6 +216,9 @@ export type Place = {
   id: number;
   name: string;
   address: string | null;
+  google_place_id?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   category?: PlaceCategory | null;
   category_id?: number | null;
   entrance_fee?: number | null;
@@ -229,6 +233,81 @@ export type Place = {
   alternative_place_info?: PlaceAlternativeInfo | null;
   created_at: string;
   updated_at: string;
+};
+
+export type PlaceSummarySource = {
+  id: number;
+  name: string;
+  url: string;
+  note: string | null;
+};
+
+export type PlaceSummaryUpdate = {
+  id: number;
+  title: string;
+  description: string;
+  source_url: string | null;
+  published_at: string | null;
+  is_official: boolean;
+  is_recent: boolean;
+  sources: PlaceSummarySource[];
+};
+
+export type PlaceSummaryCard = {
+  id: number;
+  place_id: number;
+  generated_lines: string[];
+  sources: string[];
+  generator: string | null;
+  generated_at: string | null;
+  cached_at: string | null;
+  is_cache_valid: boolean;
+  created_by: string | null;
+  updates: PlaceSummaryUpdate[];
+};
+
+export type PlaceAlternativeCandidate = {
+  place: {
+    place_id: string;
+    name: string;
+    rating: number;
+    user_ratings_total: number;
+    types: string[];
+    location: { latitude: number; longitude: number };
+  };
+  total_duration_seconds: number;
+  total_duration_text: string;
+  delta_seconds: number;
+  delta_text: string;
+  distance_meters?: number | null;
+  distance_text?: string | null;
+};
+
+export type PlaceAlternativesResponse = {
+  base_route: {
+    previous_place_id: string;
+    next_place_id: string;
+    unavailable_place: {
+      place_id: string;
+      name: string;
+      types: string[];
+      location: { latitude: number; longitude: number };
+    };
+    original_duration_seconds?: number;
+    original_duration_text?: string;
+    original_distance_meters?: number | null;
+    original_distance_text?: string | null;
+  };
+  alternatives: PlaceAlternativeCandidate[];
+  searched_category: string;
+  generated_at: string;
+};
+
+export type PlaceAlternativesRequest = {
+  previous_place_id: string;
+  unavailable_place_id: string;
+  next_place_id: string;
+  travel_mode: 'DRIVE' | 'WALK' | 'BICYCLE' | 'TRANSIT';
 };
 
 export type CoordinatorRole = {

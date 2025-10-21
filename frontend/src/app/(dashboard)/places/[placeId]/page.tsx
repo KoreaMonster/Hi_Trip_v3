@@ -19,13 +19,27 @@ import {
 } from 'lucide-react';
 
 import { mergeAlternativeInfo } from '@/lib/alternativePlace';
-import { usePlaceDetailQuery, usePlaceCoordinatorsQuery } from '@/lib/queryHooks';
+import {
+  usePlaceDetailQuery,
+  usePlaceCoordinatorsQuery,
+  usePlaceSummaryCardQuery,
+} from '@/lib/queryHooks';
 import type { Place } from '@/types/api';
 
-const buildDescriptionLines = (text?: string | null) => {
-  if (!text) return [] as string[];
+const deriveDescriptionLines = (
+  input?: string | string[] | null,
+  limit = 8,
+) => {
+  if (!input) return [] as string[];
 
-  const trimmed = text.trim();
+  if (Array.isArray(input)) {
+    return input
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .filter((value) => value.length > 0)
+      .slice(0, limit);
+  }
+
+  const trimmed = input.trim();
   if (!trimmed) return [] as string[];
 
   try {
@@ -35,7 +49,7 @@ const buildDescriptionLines = (text?: string | null) => {
         .map((value) => (typeof value === 'string' ? value.trim() : ''))
         .filter((value) => value.length > 0);
       if (normalized.length > 0) {
-        return normalized.slice(0, 8);
+        return normalized.slice(0, limit);
       }
     }
     if (typeof parsed === 'object' && parsed !== null) {
@@ -44,7 +58,7 @@ const buildDescriptionLines = (text?: string | null) => {
         .map((value) => (typeof value === 'string' ? value.trim() : ''))
         .filter((value) => value.length > 0);
       if (aggregated.length > 0) {
-        return aggregated.slice(0, 8);
+        return aggregated.slice(0, limit);
       }
     }
   } catch (error) {
@@ -55,12 +69,12 @@ const buildDescriptionLines = (text?: string | null) => {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
-  if (lines.length >= 4) return lines.slice(0, 8);
+  if (lines.length >= 4) return lines.slice(0, limit);
   return trimmed
     .split(/(?<=[.!?])\s+/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
-    .slice(0, 8);
+    .slice(0, limit);
 };
 
 const formatDate = (value?: string | null) => {
@@ -79,6 +93,7 @@ export default function PlaceDetailPage() {
   const { data: place, isLoading, isError } = usePlaceDetailQuery(resolvedPlaceId);
   const { data: coordinators = [], isLoading: isCoordinatorsLoading } =
     usePlaceCoordinatorsQuery(resolvedPlaceId);
+  const { data: summaryCard } = usePlaceSummaryCardQuery(resolvedPlaceId);
 
   if (!resolvedPlaceId) {
     return (
@@ -107,7 +122,9 @@ export default function PlaceDetailPage() {
     );
   }
 
-  const descriptionLines = buildDescriptionLines(place.ai_generated_info);
+  const descriptionLines = summaryCard?.generated_lines?.length
+    ? summaryCard.generated_lines.slice(0, 8)
+    : deriveDescriptionLines(place.ai_generated_info);
   const alternative = mergeAlternativeInfo(place.alternative_place_info, place.ai_alternative_place);
 
   return (
