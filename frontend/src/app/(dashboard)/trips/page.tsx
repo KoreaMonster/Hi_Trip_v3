@@ -13,6 +13,14 @@ type TripFormState = {
   destination: string;
   start_date: string;
   end_date: string;
+  status: Trip['status'];
+  manager: string;
+  heart_rate_min: string;
+  heart_rate_max: string;
+  spo2_min: string;
+  geofence_center_lat: string;
+  geofence_center_lng: string;
+  geofence_radius_km: string;
 };
 
 const initialTripForm: TripFormState = {
@@ -20,6 +28,14 @@ const initialTripForm: TripFormState = {
   destination: '',
   start_date: '',
   end_date: '',
+  status: 'planning',
+  manager: '',
+  heart_rate_min: '',
+  heart_rate_max: '',
+  spo2_min: '',
+  geofence_center_lat: '',
+  geofence_center_lng: '',
+  geofence_radius_km: '',
 };
 
 const tripStatusMeta: Record<Trip['status'], { label: string; tone: string; chip: string }> = {
@@ -41,6 +57,10 @@ const tripStatusMeta: Record<Trip['status'], { label: string; tone: string; chip
 };
 
 const statusFilters: Array<'all' | Trip['status']> = ['all', 'planning', 'ongoing', 'completed'];
+const tripStatusEntries = Object.entries(tripStatusMeta) as Array<[
+  Trip['status'],
+  (typeof tripStatusMeta)[Trip['status']],
+]>;
 
 export default function TripsPage() {
   const { data: trips = [], isLoading } = useTripsQuery();
@@ -72,9 +92,10 @@ export default function TripsPage() {
     },
   });
 
+  const staffQueryEnabled = canManageAssignments && (assignTarget !== null || showCreateModal);
   const { data: staffDirectory = [], isLoading: staffLoading } = useStaffDirectoryQuery(
-    assignTarget && canManageAssignments ? { is_approved: true } : undefined,
-    { enabled: canManageAssignments && assignTarget !== null },
+    canManageAssignments ? { is_approved: true } : undefined,
+    { enabled: staffQueryEnabled },
   );
 
   useEffect(() => {
@@ -141,12 +162,109 @@ export default function TripsPage() {
       return;
     }
 
+    const parseNumberField = (value: string, label: string) => {
+      if (!value.trim()) {
+        return { value: null as number | null, hasError: false };
+      }
+      const parsed = Number(value);
+      if (Number.isNaN(parsed)) {
+        setFormError(`${label}은 숫자로 입력해 주세요.`);
+        return { value: null as number | null, hasError: true };
+      }
+      return { value: parsed, hasError: false };
+    };
+
+    const { value: heartRateMin, hasError: heartRateMinError } = parseNumberField(
+      form.heart_rate_min,
+      '최소 심박수',
+    );
+    if (heartRateMinError) return;
+
+    const { value: heartRateMax, hasError: heartRateMaxError } = parseNumberField(
+      form.heart_rate_max,
+      '최대 심박수',
+    );
+    if (heartRateMaxError) return;
+
+    if (heartRateMin !== null && heartRateMax !== null && heartRateMin > heartRateMax) {
+      setFormError('최소 심박수는 최대 심박수보다 작거나 같아야 합니다.');
+      return;
+    }
+
+    const { value: spo2Min, hasError: spo2Error } = parseNumberField(form.spo2_min, '최소 산소포화도');
+    if (spo2Error) return;
+    if (spo2Min !== null && (spo2Min < 0 || spo2Min > 100)) {
+      setFormError('산소포화도는 0부터 100 사이의 값으로 입력해 주세요.');
+      return;
+    }
+
+    const { value: geofenceLat, hasError: geofenceLatError } = parseNumberField(
+      form.geofence_center_lat,
+      '지오펜스 위도',
+    );
+    if (geofenceLatError) return;
+    const { value: geofenceLng, hasError: geofenceLngError } = parseNumberField(
+      form.geofence_center_lng,
+      '지오펜스 경도',
+    );
+    if (geofenceLngError) return;
+    const { value: geofenceRadius, hasError: geofenceRadiusError } = parseNumberField(
+      form.geofence_radius_km,
+      '허용 반경',
+    );
+    if (geofenceRadiusError) return;
+
+    const hasGeofenceValue = [form.geofence_center_lat, form.geofence_center_lng, form.geofence_radius_km]
+      .some((value) => value.trim().length > 0);
+
+    if (hasGeofenceValue) {
+      if (geofenceLat === null || geofenceLng === null || geofenceRadius === null) {
+        setFormError('지오펜스를 사용하려면 위도, 경도, 반경을 모두 입력해 주세요.');
+        return;
+      }
+      if (Math.abs(geofenceLat) > 90) {
+        setFormError('위도는 -90에서 90 사이의 값으로 입력해 주세요.');
+        return;
+      }
+      if (Math.abs(geofenceLng) > 180) {
+        setFormError('경도는 -180에서 180 사이의 값으로 입력해 주세요.');
+        return;
+      }
+      if (geofenceRadius <= 0) {
+        setFormError('허용 반경은 0보다 큰 값으로 입력해 주세요.');
+        return;
+      }
+    }
+
+    const { value: managerId, hasError: managerError } = parseNumberField(form.manager, '담당자 ID');
+    if (managerError) return;
+    const normalizedManager = managerId !== null ? Math.trunc(managerId) : null;
+
     const payload: TripCreate = {
       title: form.title.trim(),
       destination: form.destination.trim(),
       start_date: form.start_date,
       end_date: form.end_date,
+      status: form.status,
     };
+
+    if (normalizedManager !== null) {
+      payload.manager = normalizedManager;
+    }
+    if (heartRateMin !== null) {
+      payload.heart_rate_min = heartRateMin;
+    }
+    if (heartRateMax !== null) {
+      payload.heart_rate_max = heartRateMax;
+    }
+    if (spo2Min !== null) {
+      payload.spo2_min = spo2Min;
+    }
+    if (geofenceLat !== null && geofenceLng !== null && geofenceRadius !== null) {
+      payload.geofence_center_lat = geofenceLat;
+      payload.geofence_center_lng = geofenceLng;
+      payload.geofence_radius_km = geofenceRadius;
+    }
 
     createTripMutation.mutate(payload);
   };
@@ -411,6 +529,165 @@ export default function TripsPage() {
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
                     required
                   />
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label htmlFor="trip-status" className="text-sm font-semibold text-slate-700">
+                    진행 상태
+                  </label>
+                  <select
+                    id="trip-status"
+                    value={form.status}
+                    onChange={(event) => handleFormChange('status')(event.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                  >
+                    {tripStatusEntries.map(([value, meta]) => (
+                      <option key={value} value={value}>
+                        {meta.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700" htmlFor="trip-manager-select">
+                    담당자 (선택)
+                  </label>
+                  {canManageAssignments ? (
+                    staffLoading && staffQueryEnabled ? (
+                      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                        담당자 목록을 불러오는 중입니다.
+                      </div>
+                    ) : staffQueryEnabled && staffDirectory.length === 0 ? (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-600">
+                        승인된 담당자가 없어 바로 배정할 수 없습니다.
+                      </div>
+                    ) : (
+                      <select
+                        id="trip-manager-select"
+                        value={form.manager}
+                        onChange={(event) => handleFormChange('manager')(event.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                      >
+                        <option value="">담당자 미지정</option>
+                        {staffDirectory.map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {member.full_name_kr} · {member.role_display}
+                          </option>
+                        ))}
+                      </select>
+                    )
+                  ) : (
+                    <div className="rounded-xl border border-slate-100 bg-[#F9FBFF] px-4 py-3 text-sm text-slate-500">
+                      담당자 배정은 총괄담당자만 설정할 수 있습니다.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-4 rounded-2xl border border-slate-100 bg-[#F7F9FC] p-4">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold text-slate-900">모니터링 임계치</h3>
+                  <p className="text-xs text-slate-500">심박수와 산소포화도 기준을 설정하면 실시간 경보에 활용됩니다.</p>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-2">
+                    <label htmlFor="trip-heart-min" className="text-xs font-semibold text-slate-600">
+                      최소 심박수 (bpm)
+                    </label>
+                    <input
+                      id="trip-heart-min"
+                      type="number"
+                      min={0}
+                      value={form.heart_rate_min}
+                      onChange={(event) => handleFormChange('heart_rate_min')(event.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                      placeholder="예: 50"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label htmlFor="trip-heart-max" className="text-xs font-semibold text-slate-600">
+                      최대 심박수 (bpm)
+                    </label>
+                    <input
+                      id="trip-heart-max"
+                      type="number"
+                      min={0}
+                      value={form.heart_rate_max}
+                      onChange={(event) => handleFormChange('heart_rate_max')(event.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                      placeholder="예: 120"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label htmlFor="trip-spo2-min" className="text-xs font-semibold text-slate-600">
+                      최소 산소포화도 (%)
+                    </label>
+                    <input
+                      id="trip-spo2-min"
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.1"
+                      value={form.spo2_min}
+                      onChange={(event) => handleFormChange('spo2_min')(event.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                      placeholder="예: 94.5"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4 rounded-2xl border border-slate-100 bg-[#F7F9FC] p-4">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold text-slate-900">위치 기반 안전 구역</h3>
+                  <p className="text-xs text-slate-500">지오펜스 기준점을 설정하면 여행 중 이탈 여부를 감지합니다.</p>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-2">
+                    <label htmlFor="trip-geofence-lat" className="text-xs font-semibold text-slate-600">
+                      위도
+                    </label>
+                    <input
+                      id="trip-geofence-lat"
+                      type="number"
+                      step="0.000001"
+                      value={form.geofence_center_lat}
+                      onChange={(event) => handleFormChange('geofence_center_lat')(event.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                      placeholder="예: 37.5665"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label htmlFor="trip-geofence-lng" className="text-xs font-semibold text-slate-600">
+                      경도
+                    </label>
+                    <input
+                      id="trip-geofence-lng"
+                      type="number"
+                      step="0.000001"
+                      value={form.geofence_center_lng}
+                      onChange={(event) => handleFormChange('geofence_center_lng')(event.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                      placeholder="예: 126.9780"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label htmlFor="trip-geofence-radius" className="text-xs font-semibold text-slate-600">
+                      허용 반경 (km)
+                    </label>
+                    <input
+                      id="trip-geofence-radius"
+                      type="number"
+                      min={0}
+                      step="0.1"
+                      value={form.geofence_radius_km}
+                      onChange={(event) => handleFormChange('geofence_radius_km')(event.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                      placeholder="예: 2.5"
+                    />
+                  </div>
                 </div>
               </div>
 

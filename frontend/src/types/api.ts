@@ -20,6 +20,18 @@ export type UserDetail = {
 export type LoginResponse = UserDetail;
 export type ProfileResponse = UserDetail;
 
+export type UserCreate = {
+  username: string;
+  email: string;
+  password: string;
+  phone: string;
+  first_name: string;
+  last_name: string;
+  first_name_kr: string;
+  last_name_kr: string;
+  role: 'super_admin' | 'manager';
+};
+
 // ─── Monitoring ───────────────────────────────────────────────────────────────
 export type HealthResponse = {
   status: string;
@@ -76,6 +88,14 @@ export type Trip = {
   manager?: number | null;
   manager_name?: string | null;
   participant_count?: number;
+  heart_rate_min?: number | null;
+  heart_rate_max?: number | null;
+  spo2_min?: number | string | null;
+  geofence_center_lat?: number | string | null;
+  geofence_center_lng?: number | string | null;
+  geofence_radius_km?: number | string | null;
+  created_at?: string;
+  updated_at?: string;
 };
 
 export type TripCreate = {
@@ -83,17 +103,19 @@ export type TripCreate = {
   destination: string;
   start_date: string;
   end_date: string;
+  status?: TripStatus;
+  manager?: number | null;
+  heart_rate_min?: number | null;
+  heart_rate_max?: number | null;
+  spo2_min?: number | null;
+  geofence_center_lat?: number | null;
+  geofence_center_lng?: number | null;
+  geofence_radius_km?: number | null;
 };
 
 export type TripDetail = Trip & {
   invite_code: string;
   participant_count: number;
-  heart_rate_min: number | null;
-  heart_rate_max: number | null;
-  spo2_min: string | null;
-  geofence_center_lat: string | null;
-  geofence_center_lng: string | null;
-  geofence_radius_km: string | null;
   participants: TripParticipant[];
 };
 

@@ -14,6 +14,7 @@ import type {
   TripCreate,
   TripDetail,
   TripParticipant,
+  UserCreate,
   UserDetail,
 } from '@/types/api';
 
@@ -102,6 +103,9 @@ export const createTrip = async (body: TripCreate): Promise<Trip> =>
     const trip = await apiClient.post('api/trips/', { json: body }).json<Trip>();
     return normalizeTrip(trip);
   });
+
+export const createStaff = async (body: UserCreate): Promise<UserDetail> =>
+  apiRequest(() => apiClient.post('api/auth/staff/', { json: body }).json<UserDetail>());
 
 export const listParticipants = async (tripId: number): Promise<TripParticipant[]> =>
   apiRequest(() => apiClient.get(`api/trips/${tripId}/participants/`).json<TripParticipant[]>());

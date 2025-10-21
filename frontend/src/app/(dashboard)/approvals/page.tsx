@@ -1,12 +1,37 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { FormEvent, useEffect, useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { CheckCircle, Shield, UserPlus } from 'lucide-react';
-import { approveStaff } from '@/lib/api';
+import { approveStaff, createStaff } from '@/lib/api';
 import { usePendingStaffQuery } from '@/lib/queryHooks';
 import { useUserStore } from '@/stores/useUserStore';
+import type { UserCreate } from '@/types/api';
+
+type StaffFormState = {
+  username: string;
+  email: string;
+  password: string;
+  phone: string;
+  first_name: string;
+  last_name: string;
+  first_name_kr: string;
+  last_name_kr: string;
+  role: UserCreate['role'];
+};
+
+const initialStaffForm: StaffFormState = {
+  username: '',
+  email: '',
+  password: '',
+  phone: '',
+  first_name: '',
+  last_name: '',
+  first_name_kr: '',
+  last_name_kr: '',
+  role: 'manager',
+};
 
 export default function ApprovalsPage() {
   const router = useRouter();
@@ -17,12 +42,29 @@ export default function ApprovalsPage() {
   const [approvedIds, setApprovedIds] = useState<number[]>([]);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [staffForm, setStaffForm] = useState<StaffFormState>({ ...initialStaffForm });
+  const [staffFormError, setStaffFormError] = useState<string | null>(null);
+  const [staffFormSuccess, setStaffFormSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     if (user && !isSuperAdmin) {
       router.replace('/');
     }
   }, [user, isSuperAdmin, router]);
+
+  const createStaffMutation = useMutation({
+    mutationFn: (payload: UserCreate) => createStaff(payload),
+    onSuccess: async (created) => {
+      setStaffForm({ ...initialStaffForm });
+      setStaffFormError(null);
+      setStaffFormSuccess(`${created.full_name_kr} 님이 등록되었습니다. 승인 후 사용 가능합니다.`);
+      await queryClient.invalidateQueries({ queryKey: ['staff', 'pending'] });
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : '직원 등록 중 오류가 발생했습니다.';
+      setStaffFormError(message);
+    },
+  });
 
   if (!user) {
     return (
@@ -61,6 +103,56 @@ export default function ApprovalsPage() {
     }
   };
 
+  const handleStaffFormChange = (field: keyof StaffFormState) => (value: string) => {
+    setStaffForm((prev) => ({ ...prev, [field]: value }));
+    if (staffFormSuccess) {
+      setStaffFormSuccess(null);
+    }
+    if (staffFormError) {
+      setStaffFormError(null);
+    }
+  };
+
+  const handleSubmitStaff = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setStaffFormError(null);
+    setStaffFormSuccess(null);
+
+    if (!staffForm.username.trim()) {
+      setStaffFormError('로그인에 사용할 아이디를 입력해 주세요.');
+      return;
+    }
+
+    if (staffForm.password.length < 8) {
+      setStaffFormError('비밀번호는 8자 이상으로 입력해 주세요.');
+      return;
+    }
+
+    if (!staffForm.first_name_kr.trim() || !staffForm.last_name_kr.trim()) {
+      setStaffFormError('직원의 한글 이름과 성을 모두 입력해 주세요.');
+      return;
+    }
+
+    if (!staffForm.phone.trim()) {
+      setStaffFormError('연락처를 입력해 주세요.');
+      return;
+    }
+
+    const payload: UserCreate = {
+      username: staffForm.username.trim(),
+      email: staffForm.email.trim(),
+      password: staffForm.password,
+      phone: staffForm.phone.trim(),
+      first_name: staffForm.first_name.trim(),
+      last_name: staffForm.last_name.trim(),
+      first_name_kr: staffForm.first_name_kr.trim(),
+      last_name_kr: staffForm.last_name_kr.trim(),
+      role: staffForm.role,
+    };
+
+    createStaffMutation.mutate(payload);
+  };
+
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
@@ -74,6 +166,177 @@ export default function ApprovalsPage() {
             대기 {pending.length - approvedIds.length}명
           </div>
         </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">직원 등록</h2>
+            <p className="text-sm text-slate-500">회원가입 양식을 작성해 신규 직원을 추가하고 승인 목록에 올려 주세요.</p>
+          </div>
+          {staffFormSuccess && (
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">{staffFormSuccess}</span>
+          )}
+        </div>
+
+        {staffFormError && (
+          <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
+            {staffFormError}
+          </div>
+        )}
+
+        <form className="mt-5 space-y-5" onSubmit={handleSubmitStaff}>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label htmlFor="staff-last-name-kr" className="text-sm font-semibold text-slate-700">
+                한글 성
+              </label>
+              <input
+                id="staff-last-name-kr"
+                value={staffForm.last_name_kr}
+                onChange={(event) => handleStaffFormChange('last_name_kr')(event.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                placeholder="예: 김"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="staff-first-name-kr" className="text-sm font-semibold text-slate-700">
+                한글 이름
+              </label>
+              <input
+                id="staff-first-name-kr"
+                value={staffForm.first_name_kr}
+                onChange={(event) => handleStaffFormChange('first_name_kr')(event.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                placeholder="예: 하늘"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label htmlFor="staff-last-name" className="text-sm font-semibold text-slate-700">
+                영문 성 (선택)
+              </label>
+              <input
+                id="staff-last-name"
+                value={staffForm.last_name}
+                onChange={(event) => handleStaffFormChange('last_name')(event.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                placeholder="예: KIM"
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="staff-first-name" className="text-sm font-semibold text-slate-700">
+                영문 이름 (선택)
+              </label>
+              <input
+                id="staff-first-name"
+                value={staffForm.first_name}
+                onChange={(event) => handleStaffFormChange('first_name')(event.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                placeholder="예: HANEUL"
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label htmlFor="staff-username" className="text-sm font-semibold text-slate-700">
+                아이디
+              </label>
+              <input
+                id="staff-username"
+                value={staffForm.username}
+                onChange={(event) => handleStaffFormChange('username')(event.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                placeholder="예: manager01"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="staff-password" className="text-sm font-semibold text-slate-700">
+                비밀번호
+              </label>
+              <input
+                id="staff-password"
+                type="password"
+                value={staffForm.password}
+                onChange={(event) => handleStaffFormChange('password')(event.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                placeholder="최소 8자"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label htmlFor="staff-email" className="text-sm font-semibold text-slate-700">
+                이메일 (선택)
+              </label>
+              <input
+                id="staff-email"
+                type="email"
+                value={staffForm.email}
+                onChange={(event) => handleStaffFormChange('email')(event.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                placeholder="예: manager@hi-trip.io"
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="staff-phone" className="text-sm font-semibold text-slate-700">
+                연락처
+              </label>
+              <input
+                id="staff-phone"
+                value={staffForm.phone}
+                onChange={(event) => handleStaffFormChange('phone')(event.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                placeholder="예: 010-1234-5678"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 text-sm text-slate-700 md:flex-row md:items-center md:justify-between">
+            <label className="font-semibold" htmlFor="staff-role">
+              역할 지정
+            </label>
+            <select
+              id="staff-role"
+              value={staffForm.role}
+              onChange={(event) => handleStaffFormChange('role')(event.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100 md:w-52"
+            >
+              <option value="manager">담당자</option>
+              <option value="super_admin">총괄담당자</option>
+            </select>
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <button
+              type="reset"
+              onClick={() => {
+                setStaffForm({ ...initialStaffForm });
+                setStaffFormError(null);
+                setStaffFormSuccess(null);
+              }}
+              className="rounded-full border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600"
+            >
+              초기화
+            </button>
+            <button
+              type="submit"
+              disabled={createStaffMutation.isLoading}
+              className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {createStaffMutation.isLoading ? '등록 중...' : '직원 등록'}
+            </button>
+          </div>
+        </form>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

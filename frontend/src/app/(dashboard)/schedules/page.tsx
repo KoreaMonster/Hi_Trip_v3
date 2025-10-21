@@ -13,7 +13,7 @@ import {
   Search,
 } from 'lucide-react';
 import { createSchedule } from '@/lib/api';
-import { useSchedulesQuery, useTripsQuery } from '@/lib/queryHooks';
+import { usePlacesQuery, useSchedulesQuery, useTripsQuery } from '@/lib/queryHooks';
 import type { Schedule, ScheduleCreate, Trip } from '@/types/api';
 
 const minutesToLabel = (minutes?: number | null) => {
@@ -33,6 +33,8 @@ const initialScheduleForm = {
   meeting_point: '',
   transport: '',
   budget: '',
+  place_id: '',
+  order: '',
 };
 
 type ScheduleFormState = typeof initialScheduleForm;
@@ -66,6 +68,8 @@ export default function SchedulesPage() {
   const { data: schedules = [], isLoading } = useSchedulesQuery(selectedTripId ?? undefined, {
     enabled: typeof selectedTripId === 'number',
   });
+
+  const { data: places = [], isLoading: placesLoading } = usePlacesQuery();
 
   const filteredTrips = useMemo(() => {
     const keyword = tripFilter.trim().toLowerCase();
@@ -191,10 +195,35 @@ export default function SchedulesPage() {
 
     const sameDaySchedules = schedules.filter((schedule) => schedule.day_number === dayNumber);
 
+    if (form.budget && Number(form.budget) < 0) {
+      setFormError('예산은 0 이상의 금액으로 입력해 주세요.');
+      return;
+    }
+
+    let placeId: number | null = null;
+    if (form.place_id.trim()) {
+      const parsedPlace = Number(form.place_id);
+      if (Number.isNaN(parsedPlace)) {
+        setFormError('방문 장소를 올바르게 선택해 주세요.');
+        return;
+      }
+      placeId = parsedPlace;
+    }
+
     const nextOrder = sameDaySchedules.reduce((order, schedule) => {
       const candidate = typeof schedule.order === 'number' ? schedule.order : 0;
       return Math.max(order, candidate);
     }, 0);
+
+    let manualOrder: number | null = null;
+    if (form.order.trim()) {
+      const parsedOrder = Number(form.order);
+      if (Number.isNaN(parsedOrder) || parsedOrder < 1) {
+        setFormError('순서는 1 이상의 숫자로 입력해 주세요.');
+        return;
+      }
+      manualOrder = Math.floor(parsedOrder);
+    }
 
     const payload: ScheduleCreate = {
       day_number: dayNumber,
@@ -204,8 +233,12 @@ export default function SchedulesPage() {
       meeting_point: form.meeting_point.trim() || null,
       transport: form.transport.trim() || null,
       budget: form.budget ? Number(form.budget) : null,
-      order: nextOrder + 1,
+      order: manualOrder ?? nextOrder + 1,
     };
+
+    if (placeId !== null) {
+      payload.place_id = placeId;
+    }
 
     setIsSubmitting(true);
     createScheduleMutation.mutate({ tripId: selectedTripId, payload });
@@ -556,6 +589,35 @@ export default function SchedulesPage() {
                       </div>
 
                       <div className="space-y-2">
+                        <label htmlFor="schedule-place" className="text-sm font-semibold text-slate-700">
+                          방문 장소
+                        </label>
+                        {placesLoading ? (
+                          <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-2 text-sm text-slate-500">
+                            방문 가능 장소를 불러오는 중입니다.
+                          </div>
+                        ) : places.length === 0 ? (
+                          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-600">
+                            등록된 장소가 없습니다. 장소 관리에서 먼저 추가해 주세요.
+                          </div>
+                        ) : (
+                          <select
+                            id="schedule-place"
+                            value={form.place_id}
+                            onChange={(event) => handleFormChange('place_id')(event.target.value)}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                          >
+                            <option value="">방문 장소 미정</option>
+                            {places.map((place) => (
+                              <option key={place.id} value={place.id}>
+                                {place.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
                         <label htmlFor="schedule-meeting" className="text-sm font-semibold text-slate-700">
                           집결지
                         </label>
@@ -569,7 +631,7 @@ export default function SchedulesPage() {
                         />
                       </div>
 
-                      <div className="grid gap-4 md:grid-cols-2">
+                      <div className="grid gap-4 md:grid-cols-3">
                         <div className="space-y-2">
                           <label htmlFor="schedule-transport" className="text-sm font-semibold text-slate-700">
                             이동 수단
@@ -593,8 +655,22 @@ export default function SchedulesPage() {
                             min={0}
                             value={form.budget}
                             onChange={(event) => handleFormChange('budget')(event.target.value)}
+                          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                          placeholder="예: 50000"
+                        />
+                      </div>
+                        <div className="space-y-2">
+                          <label htmlFor="schedule-order" className="text-sm font-semibold text-slate-700">
+                            순서 (선택)
+                          </label>
+                          <input
+                            id="schedule-order"
+                            type="number"
+                            min={1}
+                            value={form.order}
+                            onChange={(event) => handleFormChange('order')(event.target.value)}
                             className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
-                            placeholder="예: 50000"
+                            placeholder="자동 배정"
                           />
                         </div>
                       </div>
