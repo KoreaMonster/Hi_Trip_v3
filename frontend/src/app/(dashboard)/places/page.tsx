@@ -14,7 +14,8 @@ import {
   Sparkles,
   Stars,
 } from 'lucide-react';
-import { useCategoriesQuery, usePlacesQuery, useSchedulesQuery, useTripsQuery } from '@/lib/queryHooks';
+import { useCategoriesQuery, usePlacesQuery, useSchedulesQuery } from '@/lib/queryHooks';
+import { useScopedTrips } from '@/lib/useScopedTrips';
 import type { Place, PlaceAlternativeInfo } from '@/types/api';
 
 const parseAlternative = (
@@ -57,7 +58,11 @@ const buildDescriptionLines = (text?: string | null) => {
 export default function PlacesPage() {
   const { data: places = [], isLoading } = usePlacesQuery();
   const { data: categories = [] } = useCategoriesQuery();
-  const { data: trips = [] } = useTripsQuery();
+  const {
+    data: trips = [],
+    isLoading: tripsLoading,
+    isSuperAdmin,
+  } = useScopedTrips();
   const [selectedCategory, setSelectedCategory] = useState<'all' | number>('all');
   const [keyword, setKeyword] = useState('');
   const [activePlaceId, setActivePlaceId] = useState<number | null>(null);
@@ -93,7 +98,14 @@ export default function PlacesPage() {
   }, [categoryOptions, selectedCategory]);
 
   useEffect(() => {
-    if (trips.length > 0 && selectedTripId === null) {
+    if (trips.length === 0) {
+      if (selectedTripId !== null) {
+        setSelectedTripId(null);
+      }
+      return;
+    }
+
+    if (selectedTripId === null || !trips.some((trip) => trip.id === selectedTripId)) {
       setSelectedTripId(trips[0].id);
     }
   }, [selectedTripId, trips]);
@@ -132,6 +144,8 @@ export default function PlacesPage() {
   );
 
   const selectedTrip = useMemo(() => trips.find((trip) => trip.id === selectedTripId) ?? null, [trips, selectedTripId]);
+  const canSelectTrip = trips.length > 1;
+  const noTripMessage = isSuperAdmin ? '등록된 여행이 없습니다.' : '담당된 여행이 없습니다.';
 
   const sortedSchedules = useMemo(() => {
     return [...schedules].sort((a, b) => {
@@ -155,27 +169,44 @@ export default function PlacesPage() {
                 <Navigation className="h-3.5 w-3.5" /> {selectedTrip.title} · {selectedTrip.destination}
               </div>
             )}
+            {!selectedTrip && (
+              <div className="mt-3 inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+                {tripsLoading ? '여행 정보를 불러오는 중입니다.' : noTripMessage}
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative">
-              <select
-                value={selectedTripId ?? ''}
-                onChange={(event) => {
-                  const value = Number(event.target.value);
-                  setSelectedTripId(Number.isNaN(value) ? null : value);
-                }}
-                disabled={trips.length === 0}
-                className="appearance-none rounded-full border border-slate-200 bg-white px-4 py-2 pr-10 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus:border-primary-300 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {trips.length === 0 && <option value="">등록된 여행 없음</option>}
-                {trips.map((trip) => (
-                  <option key={trip.id} value={trip.id}>
-                    {trip.title}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            </div>
+            {canSelectTrip ? (
+              <div className="relative">
+                <select
+                  value={selectedTripId ?? ''}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    if (Number.isNaN(value)) {
+                      setSelectedTripId(null);
+                      return;
+                    }
+                    setSelectedTripId(value);
+                  }}
+                  className="appearance-none rounded-full border border-slate-200 bg-white px-4 py-2 pr-10 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus:border-primary-300 focus:outline-none"
+                >
+                  {trips.map((trip) => (
+                    <option key={trip.id} value={trip.id}>
+                      {trip.title}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              </div>
+            ) : selectedTrip ? (
+              <span className="inline-flex items-center gap-2 rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
+                <Navigation className="h-3.5 w-3.5" /> {selectedTrip.title}
+              </span>
+            ) : (
+              <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+                {tripsLoading ? '여행 정보를 불러오는 중입니다.' : noTripMessage}
+              </span>
+            )}
             <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-500 shadow-sm">
               <Search className="h-4 w-4 text-primary-500" />
               <input

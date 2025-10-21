@@ -13,7 +13,8 @@ import {
   Search,
 } from 'lucide-react';
 import { createSchedule } from '@/lib/api';
-import { usePlacesQuery, useSchedulesQuery, useTripsQuery } from '@/lib/queryHooks';
+import { usePlacesQuery, useSchedulesQuery } from '@/lib/queryHooks';
+import { useScopedTrips } from '@/lib/useScopedTrips';
 import type { Schedule, ScheduleCreate, Trip } from '@/types/api';
 
 const minutesToLabel = (minutes?: number | null) => {
@@ -40,7 +41,11 @@ const initialScheduleForm = {
 type ScheduleFormState = typeof initialScheduleForm;
 
 export default function SchedulesPage() {
-  const { data: trips = [] } = useTripsQuery();
+  const {
+    data: trips = [],
+    isLoading: tripsLoading,
+    isSuperAdmin,
+  } = useScopedTrips();
   const [selectedTripId, setSelectedTripId] = useState<number | null>(null);
   const [tripFilter, setTripFilter] = useState('');
   const [activeTab, setActiveTab] = useState<'details' | number>('details');
@@ -51,7 +56,14 @@ export default function SchedulesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (trips.length > 0 && selectedTripId === null) {
+    if (trips.length === 0) {
+      if (selectedTripId !== null) {
+        setSelectedTripId(null);
+      }
+      return;
+    }
+
+    if (selectedTripId === null || !trips.some((trip) => trip.id === selectedTripId)) {
       setSelectedTripId(trips[0].id);
     }
   }, [trips, selectedTripId]);
@@ -60,8 +72,8 @@ export default function SchedulesPage() {
     setActiveTab('details');
   }, [selectedTripId]);
 
-  const currentTrip = useMemo<Trip | undefined>(
-    () => trips.find((trip) => trip.id === selectedTripId ?? trips[0]?.id),
+  const currentTrip = useMemo<Trip | null>(
+    () => trips.find((trip) => trip.id === selectedTripId) ?? null,
     [trips, selectedTripId],
   );
 
@@ -70,6 +82,10 @@ export default function SchedulesPage() {
   });
 
   const { data: places = [], isLoading: placesLoading } = usePlacesQuery();
+
+  const canSelectTrip = trips.length > 1;
+  const canEditSchedule = !isSuperAdmin;
+  const noTripMessage = isSuperAdmin ? '등록된 여행이 없습니다.' : '담당된 여행이 없습니다.';
 
   const filteredTrips = useMemo(() => {
     const keyword = tripFilter.trim().toLowerCase();
@@ -82,6 +98,9 @@ export default function SchedulesPage() {
       return haystack.includes(keyword);
     });
   }, [tripFilter, trips]);
+
+  const filterActive = tripFilter.trim().length > 0;
+  const emptyTripMessage = filterActive ? '조건에 맞는 여행이 없습니다.' : noTripMessage;
 
   const grouped = useMemo(() => {
     const record = new Map<number, Schedule[]>();
@@ -252,10 +271,17 @@ export default function SchedulesPage() {
     const start = new Date(trip.start_date);
     const end = new Date(trip.end_date);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-      return '-';
+      return '기간 미정';
     }
     const diff = Math.max(0, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
     return `${start.toLocaleDateString('ko-KR')} ~ ${end.toLocaleDateString('ko-KR')} (${diff + 1}일차)`;
+  };
+
+  const formatStartDate = (value?: string | null) => {
+    if (!value) return '미정';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return '미정';
+    return parsed.toLocaleDateString('ko-KR');
   };
 
   const handleSelectTrip = (tripId: number) => {
@@ -288,19 +314,25 @@ export default function SchedulesPage() {
           <table className="min-w-full divide-y divide-slate-100 text-sm">
             <thead className="bg-[#F7F9FC] text-slate-500">
               <tr>
-                <th className="px-5 py-3 text-left font-semibold">번호</th>
-                <th className="px-5 py-3 text-left font-semibold">여행 일정</th>
+                <th className="px-5 py-3 text-left font-semibold">구분</th>
+                <th className="px-5 py-3 text-left font-semibold">신청인 수</th>
                 <th className="px-5 py-3 text-left font-semibold">여행명</th>
                 <th className="px-5 py-3 text-left font-semibold">담당자</th>
                 <th className="px-5 py-3 text-left font-semibold">시작일자</th>
-                <th className="px-5 py-3 text-right font-semibold">참가자</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {filteredTrips.length === 0 && (
+              {tripsLoading && (
                 <tr>
-                  <td colSpan={6} className="px-5 py-6 text-center text-sm text-slate-500">
-                    조건에 맞는 여행이 없습니다.
+                  <td colSpan={5} className="px-5 py-6 text-center text-sm text-slate-500">
+                    여행 정보를 불러오는 중입니다.
+                  </td>
+                </tr>
+              )}
+              {!tripsLoading && filteredTrips.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-5 py-6 text-center text-sm text-slate-500">
+                    {emptyTripMessage}
                   </td>
                 </tr>
               )}
@@ -314,17 +346,18 @@ export default function SchedulesPage() {
                       isSelected ? 'bg-primary-50/80 text-primary-700' : 'text-slate-600'
                     }`}
                   >
-                    <td className="px-5 py-3 font-medium">{index + 1}</td>
+                    <td className="px-5 py-3 font-semibold">{index + 1}</td>
+                    <td className="px-5 py-3 font-semibold text-slate-700">{trip.participant_count ?? 0}명</td>
                     <td className="px-5 py-3">
-                      <div className="flex flex-col text-xs text-slate-500">
-                        <span className="text-sm font-semibold text-slate-800">{trip.destination}</span>
-                        <span>{formatTripPeriod(trip)}</span>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-semibold text-slate-900">{trip.title}</span>
+                        <span className="text-xs text-slate-500">
+                          {trip.destination ?? '목적지 미정'} · {formatTripPeriod(trip)}
+                        </span>
                       </div>
                     </td>
-                    <td className="px-5 py-3 text-sm font-semibold text-slate-900">{trip.title}</td>
-                    <td className="px-5 py-3">{trip.manager_name ?? '배정 대기'}</td>
-                    <td className="px-5 py-3">{new Date(trip.start_date).toLocaleDateString('ko-KR')}</td>
-                    <td className="px-5 py-3 text-right font-semibold">{trip.participant_count ?? 0}명</td>
+                    <td className="px-5 py-3 text-slate-600">{trip.manager_name ?? '담당자 미지정'}</td>
+                    <td className="px-5 py-3 text-slate-600">{formatStartDate(trip.start_date)}</td>
                   </tr>
                 );
               })}
@@ -338,23 +371,40 @@ export default function SchedulesPage() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">여행 일정</p>
             <h2 className="mt-1 text-xl font-bold text-slate-900">선택한 여행 타임라인</h2>
-            <p className="mt-1 text-sm text-slate-500">상세 정보와 일차별 타임라인을 확인하고 새 일정을 등록하세요.</p>
+            <p className="mt-1 text-sm text-slate-500">
+              {canEditSchedule
+                ? '상세 정보와 일차별 타임라인을 확인하고 새 일정을 등록하세요.'
+                : '총괄관리자는 모든 여행의 타임라인을 열람할 수 있습니다.'}
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative">
-              <select
-                value={selectedTripId ?? ''}
-                onChange={(event) => setSelectedTripId(Number(event.target.value))}
-                className="appearance-none rounded-full border border-slate-200 bg-white px-4 py-2 pr-10 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus:border-primary-300 focus:outline-none"
-              >
-                {trips.map((trip) => (
-                  <option key={trip.id} value={trip.id}>
-                    {trip.title}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            </div>
+            {canSelectTrip ? (
+              <div className="relative">
+                <select
+                  value={selectedTripId ?? ''}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    if (Number.isNaN(value)) {
+                      setSelectedTripId(null);
+                      return;
+                    }
+                    setSelectedTripId(value);
+                  }}
+                  className="appearance-none rounded-full border border-slate-200 bg-white px-4 py-2 pr-10 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus:border-primary-300 focus:outline-none"
+                >
+                  {trips.map((trip) => (
+                    <option key={trip.id} value={trip.id}>
+                      {trip.title}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              </div>
+            ) : currentTrip ? (
+              <span className="rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
+                {currentTrip.title}
+              </span>
+            ) : null}
             <button className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600">
               <Route className="h-4 w-4" />
               이동 동선 최적화
@@ -434,7 +484,7 @@ export default function SchedulesPage() {
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center text-sm text-slate-500">
-                  확인할 여행을 먼저 선택해 주세요.
+                  {tripsLoading ? '여행 정보를 불러오는 중입니다.' : noTripMessage}
                 </div>
               )}
 
@@ -499,7 +549,9 @@ export default function SchedulesPage() {
                         {activeDaySchedules.length === 0 && (
                           <tr>
                             <td colSpan={5} className="px-5 py-6 text-center text-sm text-slate-500">
-                              아직 등록된 일정이 없습니다. 아래에서 일정을 추가해 보세요.
+                              {canEditSchedule
+                                ? '아직 등록된 일정이 없습니다. 아래에서 일정을 추가해 보세요.'
+                                : '아직 등록된 일정이 없습니다. 담당자에게 등록을 요청해 주세요.'}
                             </td>
                           </tr>
                         )}
@@ -525,26 +577,27 @@ export default function SchedulesPage() {
                     </table>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-100 bg-[#F9FBFF] p-5">
-                    <div className="mb-4 flex items-center justify-between">
-                      <div>
-                        <h4 className="text-base font-semibold text-slate-900">새 일정 추가</h4>
-                        <p className="text-sm text-slate-500">{activeTab}일차에 필요한 일정을 즉시 등록하세요.</p>
+                  {canEditSchedule ? (
+                    <div className="rounded-2xl border border-slate-100 bg-[#F9FBFF] p-5">
+                      <div className="mb-4 flex items-center justify-between">
+                        <div>
+                          <h4 className="text-base font-semibold text-slate-900">새 일정 추가</h4>
+                          <p className="text-sm text-slate-500">{activeTab}일차에 필요한 일정을 즉시 등록하세요.</p>
+                        </div>
+                        {formSuccess && (
+                          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">
+                            {formSuccess}
+                          </span>
+                        )}
                       </div>
-                      {formSuccess && (
-                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">
-                          {formSuccess}
-                        </span>
+
+                      {formError && (
+                        <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
+                          {formError}
+                        </div>
                       )}
-                    </div>
 
-                    {formError && (
-                      <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
-                        {formError}
-                      </div>
-                    )}
-
-                    <form className="grid gap-4" onSubmit={handleSubmitSchedule}>
+                      <form className="grid gap-4" onSubmit={handleSubmitSchedule}>
                       <div className="grid gap-4 md:grid-cols-2">
                         <div className="space-y-2">
                           <label htmlFor="schedule-start" className="text-sm font-semibold text-slate-700">
@@ -695,8 +748,13 @@ export default function SchedulesPage() {
                           {isSubmitting ? '등록 중...' : '일정 등록'}
                         </button>
                       </div>
-                    </form>
-                  </div>
+                      </form>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-8 text-center text-sm text-slate-500">
+                      총괄관리자는 일정 등록 권한이 없습니다. 담당자 화면에서 여행 일정을 관리합니다.
+                    </div>
+                  )}
                 </>
               )}
             </div>

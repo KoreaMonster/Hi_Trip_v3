@@ -11,7 +11,9 @@ import {
   LifeBuoy,
   LogOut,
   Menu,
+  Plane,
   Settings,
+  ShieldCheck,
   Sparkles,
   Users,
   type LucideIcon,
@@ -29,13 +31,18 @@ interface NavItem {
   placement?: 'top' | 'bottom';
 }
 
-const NAV_ITEMS: NavItem[] = [
+const BASE_NAV_ITEMS: NavItem[] = [
   { href: '/', label: '대시보드', icon: LayoutDashboard, placement: 'top' },
+  { href: '/trips', label: '여행 전 여행 관리', icon: Plane, group: 'pre' },
   { href: '/schedules', label: '여행 전 일정 관리', icon: CalendarDays, group: 'pre' },
   { href: '/participants', label: '여행 전 고객 관리', icon: Users, group: 'pre' },
-  { href: '/monitoring', label: '고객 관리', icon: HeartPulse, group: 'mid' },
-  { href: '/places', label: '여행 추천', icon: Sparkles, group: 'mid' },
+  { href: '/monitoring', label: '여행 중 고객 관리', icon: HeartPulse, group: 'mid' },
+  { href: '/places', label: '여행 중 추천', icon: Sparkles, group: 'mid' },
   { href: '/settings', label: '설정', icon: Settings, placement: 'bottom' },
+];
+
+const SUPER_ADMIN_NAV_ITEMS: NavItem[] = [
+  { href: '/approvals', label: '승인 센터', icon: ShieldCheck, placement: 'top' },
 ];
 
 export default function AppShell({ children }: { children: ReactNode }) {
@@ -110,9 +117,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const availableNavItems = useMemo(() => {
     const role = user?.role ?? profile?.role;
     if (!role || role === 'super_admin') {
-      return NAV_ITEMS;
+      return [...SUPER_ADMIN_NAV_ITEMS, ...BASE_NAV_ITEMS];
     }
-    return NAV_ITEMS;
+    return BASE_NAV_ITEMS;
   }, [profile?.role, user?.role]);
 
   const navSections = useMemo(() => {

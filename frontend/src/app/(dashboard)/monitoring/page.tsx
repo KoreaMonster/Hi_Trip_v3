@@ -15,9 +15,9 @@ import {
   useMonitoringAlertsQuery,
   useMonitoringLatestQuery,
   useParticipantsQuery,
-  useTripsQuery,
 } from '@/lib/queryHooks';
-import type { MonitoringAlert, ParticipantLatest, TripParticipant } from '@/types/api';
+import { useScopedTrips } from '@/lib/useScopedTrips';
+import type { MonitoringAlert, ParticipantLatest, Trip, TripParticipant } from '@/types/api';
 
 type RiskLevel = 'normal' | 'warning' | 'critical' | 'offline';
 
@@ -35,6 +35,21 @@ const riskLabel: Record<RiskLevel, string> = {
   offline: '연결 대기',
 };
 
+const formatDate = (value?: string | null) => {
+  if (!value) return '미정';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return `${parsed.getFullYear()}.${String(parsed.getMonth() + 1).padStart(2, '0')}.${String(parsed.getDate()).padStart(2, '0')}`;
+};
+
+const formatTripRange = (trip?: Trip | null) => {
+  if (!trip) return '일정 정보 없음';
+  if (!trip.start_date || !trip.end_date) return '일정 미정';
+  return `${formatDate(trip.start_date)} ~ ${formatDate(trip.end_date)}`;
+};
+
 type ParticipantRow = {
   participant: TripParticipant;
   snapshot: ParticipantLatest | null;
@@ -43,15 +58,64 @@ type ParticipantRow = {
 };
 
 export default function MonitoringPage() {
-  const { data: trips = [] } = useTripsQuery();
+  const {
+    data: trips = [],
+    isLoading: tripsLoading,
+    isSuperAdmin,
+  } = useScopedTrips();
   const [selectedTripId, setSelectedTripId] = useState<number | null>(null);
   const [keyword, setKeyword] = useState('');
 
+  const sortedTrips = useMemo(() => {
+    const statusPriority: Record<Trip['status'], number> = { ongoing: 0, planning: 1, completed: 2 };
+    const toComparable = (value?: string | null) => {
+      if (!value) return Number.MAX_SAFE_INTEGER;
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) {
+        return Number.MAX_SAFE_INTEGER;
+      }
+      return parsed.getTime();
+    };
+
+    return [...trips].sort((a, b) => {
+      const statusDiff = statusPriority[a.status] - statusPriority[b.status];
+      if (statusDiff !== 0) return statusDiff;
+      const dateDiff = toComparable(a.start_date) - toComparable(b.start_date);
+      if (dateDiff !== 0) return dateDiff;
+      return a.title.localeCompare(b.title);
+    });
+  }, [trips]);
+
+  const groupedTrips = useMemo(
+    () =>
+      sortedTrips.map((trip, index) => ({
+        order: index + 1,
+        trip,
+      })),
+    [sortedTrips],
+  );
+
   useEffect(() => {
-    if (trips.length > 0 && selectedTripId === null) {
-      setSelectedTripId(trips[0].id);
+    if (sortedTrips.length === 0) {
+      if (selectedTripId !== null) {
+        setSelectedTripId(null);
+      }
+      return;
     }
-  }, [selectedTripId, trips]);
+
+    if (selectedTripId === null || !sortedTrips.some((trip) => trip.id === selectedTripId)) {
+      setSelectedTripId(sortedTrips[0].id);
+    }
+  }, [selectedTripId, sortedTrips]);
+
+  const selectedTrip = useMemo(
+    () => trips.find((trip) => trip.id === selectedTripId) ?? null,
+    [trips, selectedTripId],
+  );
+  const canSelectTrip = groupedTrips.length > 1;
+  const noGroupMessage = isSuperAdmin
+    ? '등록된 여행이 없습니다.'
+    : '담당된 여행이 없습니다.';
 
   const alertsQueryEnabled = typeof selectedTripId === 'number';
   const { data: alerts = [], isLoading: alertsLoading } = useMonitoringAlertsQuery(selectedTripId ?? undefined, {
@@ -165,32 +229,122 @@ export default function MonitoringPage() {
     return 'normal';
   }, [participantRows.length, totalCritical, totalWarning, totalOffline]);
 
-  const participantsLoadingState = participantsLoading || selectedTripId === null;
+  const isTripSelected = Boolean(selectedTrip);
+  const isDataLoading = (participantsLoading || latestLoading) && isTripSelected;
 
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">여행 중 그룹</p>
+            <h1 className="mt-1 text-2xl font-bold text-slate-900">진행 중인 여행 리스트</h1>
+            <p className="mt-1 text-sm text-slate-500">
+              {isSuperAdmin
+                ? '총괄관리자는 모든 여행의 모니터링 상태를 확인할 수 있습니다.'
+                : '담당된 여행을 기준으로 실시간 모니터링 대상을 확인하세요.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200">
+          <table className="min-w-full divide-y divide-slate-100 text-sm">
+            <thead className="bg-[#F7F9FC] text-slate-500">
+              <tr>
+                <th className="px-5 py-3 text-left font-semibold">구분</th>
+                <th className="px-5 py-3 text-left font-semibold">고객 수</th>
+                <th className="px-5 py-3 text-left font-semibold">여행명</th>
+                <th className="px-5 py-3 text-left font-semibold">담당자</th>
+                <th className="px-5 py-3 text-left font-semibold">시작일자</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {tripsLoading && (
+                <tr>
+                  <td colSpan={5} className="px-5 py-6 text-center text-sm text-slate-500">
+                    여행 정보를 불러오는 중입니다.
+                  </td>
+                </tr>
+              )}
+              {!tripsLoading && groupedTrips.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-5 py-6 text-center text-sm text-slate-500">
+                    {noGroupMessage}
+                  </td>
+                </tr>
+              )}
+              {groupedTrips.map(({ order, trip }) => {
+                const isActive = trip.id === selectedTripId;
+                return (
+                  <tr
+                    key={trip.id}
+                    onClick={() => setSelectedTripId(trip.id)}
+                    className={`cursor-pointer transition ${
+                      isActive ? 'bg-primary-50/80 text-primary-700' : 'hover:bg-slate-50/70'
+                    }`}
+                    aria-selected={isActive}
+                  >
+                    <td className="px-5 py-4 font-semibold">{order}</td>
+                    <td className="px-5 py-4 font-semibold">{trip.participant_count ?? 0}명</td>
+                    <td className="px-5 py-4">
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-slate-800">{trip.title}</span>
+                        <span className="text-xs text-slate-500">
+                          {trip.destination ?? '목적지 미정'} · {formatTripRange(trip)}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-4 text-slate-600">{trip.manager_name ?? '담당자 미지정'}</td>
+                    <td className="px-5 py-4 text-slate-600">{formatDate(trip.start_date)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">여행 중 관리</p>
-            <h1 className="mt-1 text-2xl font-bold text-slate-900">고객 모니터링 센터</h1>
-            <p className="mt-1 text-sm text-slate-500">생체 데이터와 경보 내역을 확인하고 위험 상황을 빠르게 대응하세요.</p>
+            <h1 className="mt-1 text-2xl font-bold text-slate-900">
+              {selectedTrip ? `${selectedTrip.title} 모니터링 센터` : '고객 모니터링 센터'}
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              {selectedTrip
+                ? `${selectedTrip.destination ?? '목적지 미정'} · ${formatTripRange(selectedTrip)}`
+                : '생체 데이터와 경보 내역을 확인하고 위험 상황을 빠르게 대응하세요.'}
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative">
-              <select
-                value={selectedTripId ?? ''}
-                onChange={(event) => setSelectedTripId(Number(event.target.value))}
-                className="appearance-none rounded-full border border-slate-200 bg-white px-4 py-2 pr-10 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus:border-primary-300 focus:outline-none"
-              >
-                {trips.map((trip) => (
-                  <option key={trip.id} value={trip.id}>
-                    {trip.title}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            </div>
+            {canSelectTrip ? (
+              <div className="relative">
+                <select
+                  value={selectedTripId ?? ''}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    if (Number.isNaN(value)) {
+                      setSelectedTripId(null);
+                      return;
+                    }
+                    setSelectedTripId(value);
+                  }}
+                  className="appearance-none rounded-full border border-slate-200 bg-white px-4 py-2 pr-10 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus:border-primary-300 focus:outline-none"
+                >
+                  {groupedTrips.map(({ trip }) => (
+                    <option key={trip.id} value={trip.id}>
+                      {trip.title}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              </div>
+            ) : selectedTrip ? (
+              <span className="rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
+                {selectedTrip.title}
+              </span>
+            ) : null}
             <button className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700">
               <ShieldCheck className="h-4 w-4" />
               비상 매뉴얼 열기
@@ -266,59 +420,69 @@ export default function MonitoringPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
-                {(participantsLoadingState || latestLoading) && (
+                {isTripSelected ? (
+                  <>
+                    {isDataLoading && (
+                      <tr>
+                        <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-500">
+                          데이터를 불러오는 중입니다.
+                        </td>
+                      </tr>
+                    )}
+                    {!isDataLoading && sortedRows.length === 0 && (
+                      <tr>
+                        <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-500">
+                          조회된 참가자 정보가 없습니다.
+                        </td>
+                      </tr>
+                    )}
+                    {sortedRows.map((row) => {
+                      const { participant, snapshot, alerts: participantAlerts, level } = row;
+                      const traveler = participant.traveler;
+                      const birthDateValue = traveler.birth_date ? new Date(traveler.birth_date) : null;
+                      const birthDate =
+                        birthDateValue && !Number.isNaN(birthDateValue.getTime())
+                          ? birthDateValue.toLocaleDateString('ko-KR')
+                          : '-';
+                      const heartRateValue = snapshot?.health?.heart_rate;
+                      const spo2Value = snapshot?.health?.spo2 ?? null;
+                      const heartRate = typeof heartRateValue === 'number' ? `${heartRateValue} bpm` : '-';
+                      const spo2 = typeof spo2Value === 'string' && spo2Value.length > 0 ? `${spo2Value}%` : '-';
+                      return (
+                        <tr
+                          key={participant.id}
+                          className={`transition hover:bg-slate-50/70 ${
+                            level === 'critical'
+                              ? 'bg-rose-50'
+                              : level === 'warning'
+                              ? 'bg-amber-50/40'
+                              : level === 'offline'
+                              ? 'bg-slate-50'
+                              : ''
+                          }`}
+                        >
+                          <td className="px-4 py-3 font-semibold text-slate-900">{traveler.full_name_kr}</td>
+                          <td className="px-4 py-3 text-slate-600">{genderLabel(traveler.gender)}</td>
+                          <td className="px-4 py-3 text-slate-600">{birthDate}</td>
+                          <td className="px-4 py-3 text-slate-600">{traveler.phone}</td>
+                          <td className="px-4 py-3 text-slate-600">{traveler.email}</td>
+                          <td className="px-4 py-3">
+                            <RiskBadge level={level} alerts={participantAlerts.length} />
+                          </td>
+                          <td className="px-4 py-3 text-slate-700">{heartRate}</td>
+                          <td className="px-4 py-3 text-slate-700">{spo2}</td>
+                          <td className="px-4 py-3 text-right text-slate-600">{participantAlerts.length}건</td>
+                        </tr>
+                      );
+                    })}
+                  </>
+                ) : (
                   <tr>
                     <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-500">
-                      데이터를 불러오는 중입니다.
+                      {tripsLoading ? '여행 정보를 불러오는 중입니다.' : noGroupMessage}
                     </td>
                   </tr>
                 )}
-                {!participantsLoadingState && !latestLoading && sortedRows.length === 0 && (
-                  <tr>
-                    <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-500">
-                      조회된 참가자 정보가 없습니다.
-                    </td>
-                  </tr>
-                )}
-                {sortedRows.map((row) => {
-                  const { participant, snapshot, alerts: participantAlerts, level } = row;
-                  const traveler = participant.traveler;
-                  const birthDateValue = traveler.birth_date ? new Date(traveler.birth_date) : null;
-                  const birthDate =
-                    birthDateValue && !Number.isNaN(birthDateValue.getTime())
-                      ? birthDateValue.toLocaleDateString('ko-KR')
-                      : '-';
-                  const heartRateValue = snapshot?.health?.heart_rate;
-                  const spo2Value = snapshot?.health?.spo2 ?? null;
-                  const heartRate = typeof heartRateValue === 'number' ? `${heartRateValue} bpm` : '-';
-                  const spo2 = typeof spo2Value === 'string' && spo2Value.length > 0 ? `${spo2Value}%` : '-';
-                  return (
-                    <tr
-                      key={participant.id}
-                      className={`transition hover:bg-slate-50/70 ${
-                        level === 'critical'
-                          ? 'bg-rose-50'
-                          : level === 'warning'
-                          ? 'bg-amber-50/40'
-                          : level === 'offline'
-                          ? 'bg-slate-50'
-                          : ''
-                      }`}
-                    >
-                      <td className="px-4 py-3 font-semibold text-slate-900">{traveler.full_name_kr}</td>
-                      <td className="px-4 py-3 text-slate-600">{genderLabel(traveler.gender)}</td>
-                      <td className="px-4 py-3 text-slate-600">{birthDate}</td>
-                      <td className="px-4 py-3 text-slate-600">{traveler.phone}</td>
-                      <td className="px-4 py-3 text-slate-600">{traveler.email}</td>
-                      <td className="px-4 py-3">
-                        <RiskBadge level={level} alerts={participantAlerts.length} />
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">{heartRate}</td>
-                      <td className="px-4 py-3 text-slate-700">{spo2}</td>
-                      <td className="px-4 py-3 text-right text-slate-600">{participantAlerts.length}건</td>
-                    </tr>
-                  );
-                })}
               </tbody>
             </table>
           </div>
