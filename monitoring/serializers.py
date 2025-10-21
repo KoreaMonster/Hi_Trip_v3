@@ -125,6 +125,19 @@ class DemoGenerationSerializer(serializers.Serializer):
         )
 
 
+# ------------------------- 상세 조회용 Serializer -------------------------
+
+class ParticipantHistorySerializer(serializers.Serializer):
+    """참가자별 시계열 데이터를 반환하기 위한 Serializer."""
+
+    participant_id = serializers.IntegerField(read_only=True)
+    traveler_name = serializers.CharField(read_only=True)
+    trip_id = serializers.IntegerField(read_only=True)
+    last_updated = serializers.DateTimeField(read_only=True, allow_null=True)
+    health = HealthSnapshotSerializer(many=True, read_only=True)
+    location = LocationSnapshotSerializer(many=True, read_only=True)
+
+
 # 향후 개선 사항:
 # - Serializer에 geofence 기준점 등 Trip의 메타 데이터를 포함해 주면 프런트에서
 #   지도 반경을 그릴 때 별도의 API 호출이 필요 없습니다.

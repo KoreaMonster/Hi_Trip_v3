@@ -1,9 +1,8 @@
 """모니터링 관련 DRF ViewSet 구현."""
 
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
-from drf_spectacular.utils import extend_schema
-from rest_framework import permissions, status, viewsets
+from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema, inline_serializer
+from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -16,6 +15,7 @@ from .serializers import (
     DemoGenerationSerializer,
     HealthCheckSerializer,
     MonitoringAlertSerializer,
+    ParticipantHistorySerializer,
     ParticipantLatestSerializer,
     HealthSnapshotSerializer,
     LocationSnapshotSerializer,
@@ -125,4 +125,99 @@ class TripMonitoringViewSet(viewsets.ViewSet):
             .order_by("-created_at")
         )
         serializer = MonitoringAlertSerializer(alerts, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        summary="데모 모니터링 데이터 생성",
+        description="백엔드에서 제공하는 더미 데이터 생성기를 호출하여 실시간 흐름을 재현합니다.",
+        parameters=[trip_id_parameter],
+        request=DemoGenerationSerializer,
+        responses={
+            status.HTTP_201_CREATED: inline_serializer(
+                name="MonitoringDemoResponse",
+                fields={
+                    "created": serializers.IntegerField(),
+                    "minutes": serializers.IntegerField(),
+                    "interval": serializers.IntegerField(),
+                    "participants": serializers.IntegerField(),
+                },
+            ),
+        },
+    )
+    @action(detail=True, methods=["post"], url_path="generate-demo")
+    def generate_demo(self, request, pk=None):
+        trip = self.get_trip(pk)
+        serializer = DemoGenerationSerializer(data=request.data or {})
+        serializer.is_valid(raise_exception=True)
+        created = serializer.generate(trip)
+
+        payload = {
+            "created": created,
+            "minutes": serializer.validated_data["minutes"],
+            "interval": serializer.validated_data["interval"],
+            "participants": trip.participants.count(),
+        }
+        return Response(payload, status=status.HTTP_201_CREATED)
+
+    @extend_schema(
+        summary="참가자 시계열 데이터",
+        description="특정 참가자의 건강/위치 측정 이력을 시간 순으로 반환합니다.",
+        parameters=[
+            trip_id_parameter,
+            OpenApiParameter(
+                name="limit",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                description="가져올 최대 포인트 수 (1~240). 기본값 120.",
+            ),
+        ],
+        responses={status.HTTP_200_OK: ParticipantHistorySerializer},
+    )
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path=r"participants/(?P<participant_id>[^/.]+)/history",
+    )
+    def participant_history(self, request, pk=None, participant_id=None):
+        trip = self.get_trip(pk)
+        participant = get_object_or_404(
+            trip.participants.select_related("traveler"),
+            pk=participant_id,
+        )
+
+        limit_param = request.query_params.get("limit")
+        if limit_param is not None:
+            try:
+                limit = int(limit_param)
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "limit must be an integer."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            limit = 120
+
+        limit = max(1, min(limit, 240))
+
+        health_snapshots = list(
+            participant.health_snapshots.order_by("-measured_at")[:limit]
+        )
+        location_snapshots = list(
+            participant.location_snapshots.order_by("-measured_at")[:limit]
+        )
+
+        health_snapshots.reverse()
+        location_snapshots.reverse()
+
+        serializer = ParticipantHistorySerializer(
+            {
+                "participant_id": participant.id,
+                "traveler_name": participant.traveler.full_name_kr,
+                "trip_id": participant.trip_id,
+                "last_updated": health_snapshots[-1].measured_at if health_snapshots else None,
+                "health": health_snapshots,
+                "location": location_snapshots,
+            }
+        )
+
         return Response(serializer.data, status=status.HTTP_200_OK)
