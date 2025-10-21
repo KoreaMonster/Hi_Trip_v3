@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import {
   ChevronDown,
   Clock4,
   Compass,
+  ArrowUpRight,
   Filter,
   Locate,
   MapPin,
@@ -347,25 +349,51 @@ export default function PlacesPage() {
                   </td>
                 </tr>
               )}
-              {sortedSchedules.map((schedule) => (
-                <tr key={schedule.id} className="transition hover:bg-slate-50/70">
-                  <td className="px-4 py-3 font-semibold text-slate-800">DAY {schedule.day_number}</td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {schedule.start_time.slice(0, 5)} ~ {schedule.end_time.slice(0, 5)}
-                  </td>
-                  <td className="px-4 py-3 text-slate-700">
-                    <div className="font-semibold text-slate-900">
-                      {schedule.main_content ?? schedule.place_name ?? '세부 일정 미정'}
-                    </div>
-                    <div className="text-xs text-slate-400">#{schedule.order.toString().padStart(2, '0')}</div>
-                  </td>
+              {sortedSchedules.map((schedule) => {
+                const placeId =
+                  typeof schedule.place === 'number'
+                    ? schedule.place
+                    : typeof schedule.place_id === 'number'
+                      ? schedule.place_id
+                      : null;
+                const scheduleTitle = schedule.main_content ?? schedule.place_name ?? '세부 일정 미정';
+                const secondaryLabel =
+                  schedule.place_name && schedule.place_name !== scheduleTitle ? schedule.place_name : null;
+                const detailHref = placeId ? `/places/${placeId}` : null;
+
+                return (
+                  <tr key={schedule.id} className="transition hover:bg-slate-50/70">
+                    <td className="px-4 py-3 font-semibold text-slate-800">DAY {schedule.day_number}</td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {schedule.start_time.slice(0, 5)} ~ {schedule.end_time.slice(0, 5)}
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">
+                      <div className="font-semibold text-slate-900">
+                        {detailHref ? (
+                          <Link
+                            href={detailHref}
+                            className="inline-flex items-center gap-1 text-primary-600 hover:underline"
+                          >
+                            {scheduleTitle}
+                            <ArrowUpRight className="h-3.5 w-3.5" />
+                          </Link>
+                        ) : (
+                          scheduleTitle
+                        )}
+                      </div>
+                      {secondaryLabel && (
+                        <div className="text-xs text-slate-500">{secondaryLabel}</div>
+                      )}
+                      <div className="text-xs text-slate-400">#{schedule.order.toString().padStart(2, '0')}</div>
+                    </td>
                   <td className="px-4 py-3 text-slate-600">{schedule.transport ?? '미정'}</td>
                   <td className="px-4 py-3 text-slate-600">{schedule.meeting_point ?? '집결지 미정'}</td>
                   <td className="px-4 py-3 text-right text-slate-700">
                     {schedule.budget ? `${schedule.budget.toLocaleString()}원` : '-'}
                   </td>
-                </tr>
-              ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -375,11 +403,20 @@ export default function PlacesPage() {
 }
 
 function PlaceCard({ place, isActive, onSelect }: { place: Place; isActive: boolean; onSelect: () => void }) {
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onSelect();
+    }
+  };
+
   return (
-    <button
-      type="button"
+    <article
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
-      className={`group overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition hover:-translate-y-1 hover:shadow-lg ${
+      onKeyDown={handleKeyDown}
+      className={`group overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition hover:-translate-y-1 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2 ${
         isActive ? 'border-primary-300 ring-2 ring-primary-200 ring-offset-2' : 'border-slate-200'
       }`}
     >
@@ -402,7 +439,17 @@ function PlaceCard({ place, isActive, onSelect }: { place: Place; isActive: bool
           <span className="text-xs text-slate-400">{place.activity_time_display ?? '시간 정보 없음'}</span>
         </div>
         <div>
-          <h3 className="text-base font-semibold text-slate-900">{place.name}</h3>
+          <h3 className="text-base font-semibold text-slate-900">
+            <Link
+              href={`/places/${place.id}`}
+              className="inline-flex items-center gap-1 text-slate-900 transition hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2"
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              {place.name}
+              <ArrowUpRight className="h-3.5 w-3.5 text-primary-500" />
+            </Link>
+          </h3>
           <p className="mt-1 text-xs text-slate-500">{place.address ?? '주소 정보 없음'}</p>
         </div>
         {place.ai_generated_info && (
@@ -414,7 +461,7 @@ function PlaceCard({ place, isActive, onSelect }: { place: Place; isActive: bool
         )}
         <p className="text-xs font-semibold text-primary-600">{place.ai_meeting_point ?? '집결지 미정'}</p>
       </div>
-    </button>
+    </article>
   );
 }
 
@@ -429,6 +476,7 @@ function PlaceDetailsPanel({ place }: { place: Place | null }) {
 
   const descriptionLines = buildDescriptionLines(place.ai_generated_info);
   const alternative = parseAlternative(place.alternative_place_info ?? place.ai_alternative_place);
+  const detailHref = `/places/${place.id}`;
 
   return (
     <div className="space-y-5">
@@ -438,13 +486,22 @@ function PlaceDetailsPanel({ place }: { place: Place | null }) {
             <h2 className="text-lg font-semibold text-slate-900">일정 장소 정보</h2>
             <p className="text-xs text-slate-500">담당자와 공유할 기본 정보를 확인하세요.</p>
           </div>
-          <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
-            <Compass className="h-3.5 w-3.5" /> {place.category?.name ?? '미분류'}
-          </span>
+          <div className="flex flex-col items-end gap-2 text-right">
+            <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
+              <Compass className="h-3.5 w-3.5" /> {place.category?.name ?? '미분류'}
+            </span>
+            <Link
+              href={detailHref}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-primary-600 transition hover:text-primary-700"
+            >
+              장소 상세 페이지 이동
+              <ArrowUpRight className="h-3 w-3" />
+            </Link>
+          </div>
         </header>
 
         <div className="grid gap-3 px-5 py-4 text-sm">
-          <InfoRow label="장소명" value={place.name} />
+          <InfoRow label="장소명" value={place.name} href={detailHref} />
           <InfoRow label="주소" value={place.address ?? '주소 정보 없음'} />
           <InfoRow label="입장료" value={place.entrance_fee_display ?? '미등록'} />
           <InfoRow label="권장 체류 시간" value={place.activity_time_display ?? '미등록'} />
@@ -507,11 +564,18 @@ function PlaceDetailsPanel({ place }: { place: Place | null }) {
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoRow({ label, value, href }: { label: string; value: string; href?: string }) {
   return (
     <div className="grid gap-2 rounded-xl border border-slate-100 bg-white px-4 py-3 text-xs text-slate-500 sm:grid-cols-[120px_1fr]">
       <span className="font-semibold text-slate-700">{label}</span>
-      <span className="text-slate-600">{value}</span>
+      {href ? (
+        <Link href={href} className="inline-flex items-center gap-1 text-primary-600 hover:underline">
+          {value}
+          <ArrowUpRight className="h-3 w-3" />
+        </Link>
+      ) : (
+        <span className="text-slate-600">{value}</span>
+      )}
     </div>
   );
 }
