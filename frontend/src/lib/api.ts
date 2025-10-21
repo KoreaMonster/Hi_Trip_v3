@@ -8,8 +8,11 @@ import type {
   ParticipantHistory,
   ParticipantLatest,
   Place,
+  PlaceAlternativesRequest,
+  PlaceAlternativesResponse,
   PlaceCoordinator,
   PlaceCategory,
+  PlaceSummaryCard,
   ProfileResponse,
   Schedule,
   ScheduleCreate,
@@ -150,6 +153,22 @@ export const listPlaces = async (): Promise<Place[]> =>
 
 export const getPlaceDetail = async (placeId: number | string): Promise<Place> =>
   apiRequest(() => apiClient.get(`api/places/${placeId}/`).json<Place>());
+
+export const getPlaceSummaryCard = async (
+  placeId: number | string,
+): Promise<PlaceSummaryCard> =>
+  apiRequest(() =>
+    apiClient.get(`api/places/${placeId}/summary-card/`).json<PlaceSummaryCard>(),
+  );
+
+export const postPlaceAlternatives = async (
+  body: PlaceAlternativesRequest,
+): Promise<PlaceAlternativesResponse> =>
+  apiRequest(() =>
+    apiClient
+      .post('api/place-recommendations/alternatives/', { json: body })
+      .json<PlaceAlternativesResponse>(),
+  );
 
 export const listCategories = async (): Promise<PlaceCategory[]> =>
   apiRequest(() => apiClient.get('api/categories/').json<PlaceCategory[]>());

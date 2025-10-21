@@ -1652,9 +1652,39 @@ def test_alternative_recommendations(case, api_client, monkeypatch):
             assert item["delta_text"].startswith(expected_sign), (
                 f"{debug_header} ΔETA 텍스트 부호가 맞지 않습니다: {item['delta_text']}"
             )
+        assert "distance_text" in item, (
+            f"{debug_header} 후보 {candidate_id} 의 거리 정보가 누락되었습니다."
+        )
         assert Place.objects.filter(google_place_id=candidate_id).exists(), (
             f"{debug_header} 후보 {candidate_id} 가 DB에 저장되지 않았습니다."
         )
+
+    assert alternatives, f"{debug_header} 대체 후보가 비어 있습니다."
+    best_candidate = alternatives[0]
+    best_id = best_candidate["place"]["place_id"]
+    stored_place = Place.objects.get(
+        google_place_id=case["request"]["unavailable_place_id"]
+    )
+    stored_payload = stored_place.ai_alternative_place
+    assert stored_payload, f"{debug_header} DB에 대체 장소 정보가 저장되지 않았습니다."
+    assert stored_payload.get("place_id") == best_id, (
+        f"{debug_header} 저장된 place_id가 최상위 후보와 다릅니다."
+    )
+    assert stored_payload.get("travel_mode") == case["request"]["travel_mode"], (
+        f"{debug_header} 저장된 이동 수단이 요청값과 다릅니다."
+    )
+    expected_duration = route_seconds[best_id]
+    assert stored_payload.get("total_duration_seconds") == expected_duration, (
+        f"{debug_header} 저장된 총 이동 시간이 후보와 다릅니다."
+    )
+    expected_delta = expected_duration - base_duration
+    assert stored_payload.get("delta_seconds") == expected_delta, (
+        f"{debug_header} 저장된 ΔETA 값이 후보와 다릅니다."
+    )
+    expected_minutes = max(1, int(round(expected_duration / 60)))
+    assert stored_payload.get("eta_minutes") == expected_minutes, (
+        f"{debug_header} 저장된 ETA 분 값이 잘못되었습니다."
+    )
 
 
 @pytest.mark.django_db

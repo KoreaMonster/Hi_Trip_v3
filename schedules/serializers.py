@@ -43,6 +43,12 @@ class ScheduleSerializer(serializers.ModelSerializer):
         read_only=True,
         help_text="방문 장소 이름"
     )
+    place_google_place_id = serializers.CharField(
+        source='place.google_place_id',
+        read_only=True,
+        allow_null=True,
+        help_text="연결된 장소의 Google Place ID"
+    )
     duration_display = serializers.SerializerMethodField(
         read_only=True,
         help_text="소요 시간을 사람이 읽기 쉬운 형식으로 표시"
@@ -67,6 +73,7 @@ class ScheduleSerializer(serializers.ModelSerializer):
             'trip',
             'place',  # 읽기: 항상 응답에 포함 (null 가능)
             'place_id',  # 쓰기: 요청에서만 사용
+            'place_google_place_id',
             'day_number',
             'start_time',
             'end_time',
@@ -79,6 +86,7 @@ class ScheduleSerializer(serializers.ModelSerializer):
 
             # 추가 읽기 필드
             'place_name',
+            'place_google_place_id',
             'duration_display',
 
             # 메타
@@ -266,6 +274,18 @@ class PlaceSerializer(serializers.ModelSerializer):
 
 
     #읽기 전용 추가 필드
+    google_place_id = serializers.CharField(
+        read_only=True,
+        allow_null=True,
+        help_text="Google Place ID",
+    )
+    latitude = serializers.SerializerMethodField(
+        help_text="위도",
+    )
+    longitude = serializers.SerializerMethodField(
+        help_text="경도",
+    )
+
     entrance_fee_display = serializers.CharField(
         # source='entrance_fee_display',          # ✅ TYPO CORRECTED
         read_only=True,
@@ -299,6 +319,9 @@ class PlaceSerializer(serializers.ModelSerializer):
             'id',
             'name',
             'address',
+            'google_place_id',
+            'latitude',
+            'longitude',
             'category',  # 읽기: 중첩 객체
             'category_id',  # 쓰기: ID
             'entrance_fee',
@@ -333,6 +356,16 @@ class PlaceSerializer(serializers.ModelSerializer):
             dict or None
         """
         return obj.get_alternative_place_info()
+
+    def get_latitude(self, obj: Place) -> float | None:
+        if obj.latitude is None:
+            return None
+        return float(obj.latitude)
+
+    def get_longitude(self, obj: Place) -> float | None:
+        if obj.longitude is None:
+            return None
+        return float(obj.longitude)
 
     def validate_entrance_fee(self, value):
         """

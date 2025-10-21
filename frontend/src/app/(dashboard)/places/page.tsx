@@ -14,45 +14,94 @@ import {
   Sparkles,
   Stars,
 } from 'lucide-react';
-import { useCategoriesQuery, usePlacesQuery, useSchedulesQuery } from '@/lib/queryHooks';
+import {
+  useCategoriesQuery,
+  usePlaceAlternativesQuery,
+  usePlaceDetailQuery,
+  usePlaceSummaryCardQuery,
+  usePlacesQuery,
+  useSchedulesQuery,
+} from '@/lib/queryHooks';
+import { mergeAlternativeInfo, normalizeAlternativeInfo } from '@/lib/alternativePlace';
 import { useScopedTrips } from '@/lib/useScopedTrips';
-import type { Place, PlaceAlternativeInfo } from '@/types/api';
+import type { Place, PlaceAlternativesRequest, Schedule } from '@/types/api';
 
-const parseAlternative = (
-  info: Place['alternative_place_info'] | Place['ai_alternative_place'],
-): PlaceAlternativeInfo | null => {
-  if (!info) return null;
-  if (typeof info === 'string') {
-    try {
-      const parsed = JSON.parse(info);
-      return typeof parsed === 'object' && parsed ? (parsed as PlaceAlternativeInfo) : null;
-    } catch (error) {
-      return null;
+const deriveDescriptionLines = (
+  input?: string | string[] | null,
+  limit = 6,
+) => {
+  if (!input) return [] as string[];
+
+  if (Array.isArray(input)) {
+    return input
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .filter((value) => value.length > 0)
+      .slice(0, limit);
+  }
+
+  const trimmed = input.trim();
+  if (!trimmed) return [] as string[];
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) {
+      const normalized = parsed
+        .map((value) => (typeof value === 'string' ? value.trim() : ''))
+        .filter((value) => value.length > 0);
+      if (normalized.length > 0) {
+        return normalized.slice(0, limit);
+      }
     }
+    if (typeof parsed === 'object' && parsed !== null) {
+      const aggregated = Object.values(parsed)
+        .flat()
+        .map((value) => (typeof value === 'string' ? value.trim() : ''))
+        .filter((value) => value.length > 0);
+      if (aggregated.length > 0) {
+        return aggregated.slice(0, limit);
+      }
+    }
+  } catch (error) {
+    // JSON으로 파싱되지 않는 경우는 기존 로직을 사용합니다.
   }
-  if (typeof info === 'object') {
-    return info as PlaceAlternativeInfo;
-  }
-  return null;
-};
 
-const buildDescriptionLines = (text?: string | null) => {
-  if (!text) return [] as string[];
-  const lines = text
-    .split(/\r?\n/) // 우선 줄바꿈 기준 분리
+  const lines = trimmed
+    .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
   if (lines.length >= 4) {
-    return lines.slice(0, 6);
+    return lines.slice(0, limit);
   }
 
-  // 줄바꿈 기준이 아니라면 문장 단위로 재분리
-  return text
+  return trimmed
     .split(/(?<=[.!?])\s+/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
-    .slice(0, 6);
+    .slice(0, limit);
+};
+
+const deriveTravelMode = (
+  transport?: string | null,
+): PlaceAlternativesRequest['travel_mode'] => {
+  if (!transport) return 'DRIVE';
+  const normalized = transport.trim().toLowerCase();
+  if (!normalized) return 'DRIVE';
+  if (normalized.includes('walk') || normalized.includes('도보')) {
+    return 'WALK';
+  }
+  if (normalized.includes('bike') || normalized.includes('자전거')) {
+    return 'BICYCLE';
+  }
+  if (
+    normalized.includes('transit') ||
+    normalized.includes('버스') ||
+    normalized.includes('지하철') ||
+    normalized.includes('대중')
+  ) {
+    return 'TRANSIT';
+  }
+  return 'DRIVE';
 };
 
 export default function PlacesPage() {
@@ -283,7 +332,11 @@ export default function PlacesPage() {
           </div>
 
           <aside className="w-full max-w-xl space-y-5 xl:w-[360px]">
-            <PlaceDetailsPanel place={activePlace} />
+            <PlaceDetailsPanel
+              placeId={activePlaceId}
+              fallback={activePlace}
+              schedules={sortedSchedules}
+            />
 
             <div className="space-y-3 rounded-2xl border border-slate-100 bg-[#F9FBFF] p-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
@@ -418,8 +471,24 @@ function PlaceCard({ place, isActive, onSelect }: { place: Place; isActive: bool
   );
 }
 
-function PlaceDetailsPanel({ place }: { place: Place | null }) {
-  if (!place) {
+function PlaceDetailsPanel({
+  placeId,
+  fallback,
+  schedules,
+}: {
+  placeId: number | null;
+  fallback?: Place | null;
+  schedules: Schedule[];
+}) {
+  const hasPlaceId = typeof placeId === 'number';
+  const { data: place, isLoading, isError } = usePlaceDetailQuery(placeId ?? undefined, {
+    enabled: hasPlaceId,
+  });
+  const { data: summaryCard } = usePlaceSummaryCardQuery(
+    hasPlaceId ? placeId ?? undefined : undefined,
+  );
+
+  if (!hasPlaceId) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
         표시할 장소를 선택해 주세요.
@@ -427,8 +496,81 @@ function PlaceDetailsPanel({ place }: { place: Place | null }) {
     );
   }
 
-  const descriptionLines = buildDescriptionLines(place.ai_generated_info);
-  const alternative = parseAlternative(place.alternative_place_info ?? place.ai_alternative_place);
+  if (isError) {
+    return (
+      <div className="rounded-2xl border border-dashed border-rose-200 bg-rose-50 px-4 py-10 text-center text-sm text-rose-600">
+        장소 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
+      </div>
+    );
+  }
+
+  const resolvedPlace = place ?? fallback ?? null;
+  const alternativeParams = useMemo<PlaceAlternativesRequest | null>(() => {
+    if (!hasPlaceId || !resolvedPlace?.google_place_id) {
+      return null;
+    }
+    if (!Array.isArray(schedules) || schedules.length === 0) {
+      return null;
+    }
+
+    const currentIndex = schedules.findIndex(
+      (schedule) => schedule.place === resolvedPlace.id,
+    );
+    if (currentIndex === -1) {
+      return null;
+    }
+
+    const previous = schedules[currentIndex - 1];
+    const next = schedules[currentIndex + 1];
+    if (!previous?.place_google_place_id || !next?.place_google_place_id) {
+      return null;
+    }
+
+    return {
+      previous_place_id: previous.place_google_place_id,
+      unavailable_place_id: resolvedPlace.google_place_id,
+      next_place_id: next.place_google_place_id,
+      travel_mode: deriveTravelMode(schedules[currentIndex]?.transport),
+    };
+  }, [hasPlaceId, resolvedPlace, schedules]);
+  const {
+    data: alternativeResponse,
+    isLoading: isAlternativeLoading,
+  } = usePlaceAlternativesQuery(alternativeParams);
+
+  if (isLoading && !resolvedPlace) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500">
+        장소 정보를 불러오는 중입니다.
+      </div>
+    );
+  }
+
+  if (!resolvedPlace) {
+    return (
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+        표시할 장소를 선택해 주세요.
+      </div>
+    );
+  }
+
+  const descriptionLines = summaryCard?.generated_lines?.length
+    ? summaryCard.generated_lines.slice(0, 6)
+    : deriveDescriptionLines(resolvedPlace.ai_generated_info);
+
+  const storedAlternative = mergeAlternativeInfo(
+    resolvedPlace.alternative_place_info,
+    resolvedPlace.ai_alternative_place,
+  );
+  const liveAlternative = alternativeResponse?.alternatives?.length
+    ? normalizeAlternativeInfo(alternativeResponse.alternatives[0])
+    : null;
+  const alternative = liveAlternative
+    ? { ...(storedAlternative ?? {}), ...liveAlternative }
+    : storedAlternative;
+  const isAlternativePending = Boolean(
+    alternativeParams && isAlternativeLoading && !alternativeResponse,
+  );
 
   return (
     <div className="space-y-5">
@@ -439,16 +581,16 @@ function PlaceDetailsPanel({ place }: { place: Place | null }) {
             <p className="text-xs text-slate-500">담당자와 공유할 기본 정보를 확인하세요.</p>
           </div>
           <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
-            <Compass className="h-3.5 w-3.5" /> {place.category?.name ?? '미분류'}
+            <Compass className="h-3.5 w-3.5" /> {resolvedPlace.category?.name ?? '미분류'}
           </span>
         </header>
 
         <div className="grid gap-3 px-5 py-4 text-sm">
-          <InfoRow label="장소명" value={place.name} />
-          <InfoRow label="주소" value={place.address ?? '주소 정보 없음'} />
-          <InfoRow label="입장료" value={place.entrance_fee_display ?? '미등록'} />
-          <InfoRow label="권장 체류 시간" value={place.activity_time_display ?? '미등록'} />
-          <InfoRow label="집결지" value={place.ai_meeting_point ?? '집결지 미정'} />
+          <InfoRow label="장소명" value={resolvedPlace.name} />
+          <InfoRow label="주소" value={resolvedPlace.address ?? '주소 정보 없음'} />
+          <InfoRow label="입장료" value={resolvedPlace.entrance_fee_display ?? '미등록'} />
+          <InfoRow label="권장 체류 시간" value={resolvedPlace.activity_time_display ?? '미등록'} />
+          <InfoRow label="집결지" value={resolvedPlace.ai_meeting_point ?? '집결지 미정'} />
         </div>
       </section>
 
@@ -480,7 +622,11 @@ function PlaceDetailsPanel({ place }: { place: Place | null }) {
           </div>
           <Navigation className="h-4 w-4 text-primary-500" />
         </div>
-        {alternative ? (
+        {isAlternativePending ? (
+          <p className="mt-4 rounded-xl border border-dashed border-primary-200 bg-primary-50 px-3 py-3 text-center text-xs text-primary-600">
+            대체 장소 추천을 불러오는 중입니다.
+          </p>
+        ) : alternative ? (
           <div className="mt-4 space-y-2 rounded-xl border border-slate-100 bg-[#E8F1FF] p-4 text-xs text-slate-700">
             <p className="text-sm font-semibold text-slate-900">{alternative.place_name ?? '이름 미정'}</p>
             {alternative.reason && <p className="leading-relaxed">{alternative.reason}</p>}
@@ -493,6 +639,11 @@ function PlaceDetailsPanel({ place }: { place: Place | null }) {
               {typeof alternative.eta_minutes === 'number' && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-slate-600 shadow-sm">
                   <Clock4 className="h-3 w-3" /> 이동 {alternative.eta_minutes}분 예상
+                </span>
+              )}
+              {alternative.delta_text && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-slate-600 shadow-sm">
+                  <Navigation className="h-3 w-3" /> 경로 차이 {alternative.delta_text}
                 </span>
               )}
             </div>

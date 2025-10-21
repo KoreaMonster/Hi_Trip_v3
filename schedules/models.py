@@ -1,7 +1,11 @@
+import json
+import math
 import os
+from collections.abc import Mapping
 from datetime import datetime, timedelta
 
 from django.conf import settings
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
@@ -449,24 +453,187 @@ class Place(models.Model):
         return "정보 없음"
 
     def get_alternative_place_info(self):
-        """
-        대체 장소 정보 반환
+        """백엔드에 저장된 AI 대체 장소 정보를 정규화하여 반환합니다."""
 
-        Returns:
-            dict: {"place_name": "...", "reason": "..."}
-            None: 정보가 없는 경우
-        """
-        if not self.ai_alternative_place:
+        def _as_non_empty_str(value):
+            if isinstance(value, str):
+                text = value.strip()
+                if text:
+                    return text
             return None
 
-        # JSON 데이터가 dict 형태가 아니면 None 반환
-        if not isinstance(self.ai_alternative_place, dict):
+        def _as_number(value):
+            if isinstance(value, (int, float)) and math.isfinite(value):
+                return float(value)
+            if isinstance(value, str):
+                try:
+                    parsed = float(value.strip())
+                except (ValueError, AttributeError):
+                    return None
+                if math.isfinite(parsed):
+                    return parsed
             return None
 
-        return {
-            'place_name': self.ai_alternative_place.get('place_name', '정보 없음'),
-            'reason': self.ai_alternative_place.get('reason', '정보 없음')
-        }
+        def _minutes_from_seconds(value):
+            seconds = _as_number(value)
+            if seconds is None:
+                return None
+            return max(1, int(round(seconds / 60.0)))
+
+        def _as_minutes(value):
+            minutes = _as_number(value)
+            if minutes is None:
+                return None
+            return max(1, int(round(minutes)))
+
+        def _build_reason(candidate):
+            provided = _as_non_empty_str(candidate.get('reason'))
+            if provided:
+                return provided
+
+            parts = []
+            delta_text = _as_non_empty_str(candidate.get('delta_text'))
+            duration_text = _as_non_empty_str(candidate.get('total_duration_text'))
+            if delta_text:
+                parts.append(f"기존 경로 대비 {delta_text}")
+            if duration_text:
+                parts.append(f"총 소요 {duration_text}")
+            if parts:
+                return " · ".join(parts)
+            return None
+
+        def _extract_candidate(value):
+            if isinstance(value, list):
+                for item in value:
+                    normalized = _extract_candidate(item)
+                    if normalized:
+                        return normalized
+                return None
+
+            if not isinstance(value, Mapping):
+                return None
+
+            candidate = dict(value)
+            place_info = candidate.get('place')
+            place_name = (
+                _as_non_empty_str(candidate.get('place_name'))
+                or (
+                    _as_non_empty_str(place_info.get('name'))
+                    if isinstance(place_info, Mapping)
+                    else None
+                )
+                or _as_non_empty_str(candidate.get('name'))
+            )
+            place_id = (
+                _as_non_empty_str(candidate.get('place_id'))
+                or (
+                    _as_non_empty_str(place_info.get('place_id'))
+                    if isinstance(place_info, Mapping)
+                    else None
+                )
+            )
+
+            distance_text = (
+                _as_non_empty_str(candidate.get('distance_text'))
+                or _as_non_empty_str(candidate.get('total_duration_text'))
+                or (
+                    _as_non_empty_str(place_info.get('distance_text'))
+                    if isinstance(place_info, Mapping)
+                    else None
+                )
+            )
+
+            eta_minutes = _as_minutes(candidate.get('eta_minutes'))
+            if eta_minutes is None:
+                eta_minutes = _as_minutes(candidate.get('travel_minutes'))
+            if eta_minutes is None:
+                eta_minutes = _minutes_from_seconds(candidate.get('total_duration_seconds'))
+
+            reason = _build_reason(candidate)
+            delta_text = _as_non_empty_str(candidate.get('delta_text'))
+
+            result = {}
+            if place_name:
+                result['place_name'] = place_name
+            if place_id:
+                result['place_id'] = place_id
+            if reason:
+                result['reason'] = reason
+            if distance_text:
+                result['distance_text'] = distance_text
+            if eta_minutes is not None:
+                result['eta_minutes'] = eta_minutes
+            if delta_text:
+                result['delta_text'] = delta_text
+
+            total_duration_text = _as_non_empty_str(candidate.get('total_duration_text'))
+            if total_duration_text:
+                result['total_duration_text'] = total_duration_text
+
+            delta_seconds = candidate.get('delta_seconds')
+            if isinstance(delta_seconds, (int, float)) and math.isfinite(delta_seconds):
+                result['delta_seconds'] = int(round(float(delta_seconds)))
+
+            total_duration_seconds = candidate.get('total_duration_seconds')
+            if isinstance(total_duration_seconds, (int, float)) and math.isfinite(total_duration_seconds):
+                result['total_duration_seconds'] = int(round(float(total_duration_seconds)))
+
+            hint_url = _as_non_empty_str(candidate.get('hint_url'))
+            if hint_url:
+                result['hint_url'] = hint_url
+
+            if result:
+                return result
+
+            alternatives = candidate.get('alternatives')
+            if isinstance(alternatives, list):
+                return _extract_candidate(alternatives)
+
+            for nested in candidate.values():
+                normalized = _extract_candidate(nested)
+                if normalized:
+                    return normalized
+
+            return None
+
+        source = self.ai_alternative_place
+        if not source:
+            return None
+
+        payload = source
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except json.JSONDecodeError:
+                return None
+
+        if isinstance(payload, Mapping):
+            normalized = _extract_candidate(payload)
+            if normalized:
+                return normalized
+            # dict지만 필요한 키가 없다면 기존 필드를 그대로 반환합니다.
+            fallback = {}
+            place_name = _as_non_empty_str(payload.get('place_name'))
+            if place_name:
+                fallback['place_name'] = place_name
+            else:
+                fallback['place_name'] = '정보 없음'
+
+            reason = _as_non_empty_str(payload.get('reason'))
+            if reason:
+                fallback['reason'] = reason
+            else:
+                fallback['reason'] = '정보 없음'
+
+            hint_url = _as_non_empty_str(payload.get('hint_url'))
+            if hint_url:
+                fallback['hint_url'] = hint_url
+            return fallback
+
+        if isinstance(payload, list):
+            return _extract_candidate(payload)
+
+        return None
 class GoogleApiCache(models.Model):
     """외부 Google API 응답을 재사용하기 위한 간단한 캐시 테이블"""
 

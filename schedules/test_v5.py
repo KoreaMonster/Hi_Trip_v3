@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import time, timedelta
 
@@ -247,6 +248,65 @@ def test_place_display_and_validation_behaviour(case, place_category):
         assert info["place_name"].startswith("대체 장소")
     else:
         assert place.get_alternative_place_info() is None
+
+
+@pytest.mark.parametrize(
+    "payload, expected",
+    [
+        (
+            {
+                "alternatives": [
+                    {
+                        "place": {"name": "카페 소풍", "place_id": "alt123"},
+                        "total_duration_seconds": 780,
+                        "total_duration_text": "13분",
+                        "delta_text": "+2분",
+                    }
+                ]
+            },
+            {
+                "place_name": "카페 소풍",
+                "place_id": "alt123",
+                "eta_minutes": 13,
+                "total_duration_seconds": 780,
+                "total_duration_text": "13분",
+                "delta_text": "+2분",
+                "reason": "기존 경로 대비 +2분 · 총 소요 13분",
+            },
+        ),
+        (
+            json.dumps(
+                {
+                    "place_name": "야경 스팟",
+                    "reason": "야경이 아름다움",
+                    "distance_text": "1.2km",
+                    "eta_minutes": 5,
+                }
+            ),
+            {
+                "place_name": "야경 스팟",
+                "reason": "야경이 아름다움",
+                "distance_text": "1.2km",
+                "eta_minutes": 5,
+            },
+        ),
+    ],
+    ids=["nested-google-payload", "stringified-dict"],
+)
+def test_place_alternative_info_normalization(payload, expected):
+    place = Place(name="테스트 장소", ai_alternative_place=payload)
+
+    info = place.get_alternative_place_info()
+
+    assert info is not None
+    for key, value in expected.items():
+        assert info.get(key) == value
+
+
+def test_place_alternative_info_invalid_string():
+    place = Place(name="테스트", ai_alternative_place="{잘못된 json}")
+
+    assert place.get_alternative_place_info() is None
 
 
 @pytest.mark.django_db
