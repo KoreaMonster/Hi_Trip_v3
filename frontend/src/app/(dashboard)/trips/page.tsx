@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CalendarRange, Filter, MapPin, Plane, PlusCircle, UserCog, Users2, X } from 'lucide-react';
 import { assignTripManager, createTrip } from '@/lib/api';
+import { useTranslations } from '@/lib/i18n';
 import { useStaffDirectoryQuery } from '@/lib/queryHooks';
 import { useScopedTrips } from '@/lib/useScopedTrips';
 import type { Trip, TripCreate } from '@/types/api';
@@ -22,29 +23,12 @@ const initialTripForm: TripFormState = {
   end_date: '',
 };
 
-const tripStatusMeta: Record<Trip['status'], { label: string; tone: string; chip: string }> = {
-  planning: {
-    label: '계획 중',
-    tone: 'bg-amber-50 text-amber-600 border border-amber-200',
-    chip: 'bg-amber-500/15 text-amber-600',
-  },
-  ongoing: {
-    label: '진행 중',
-    tone: 'bg-primary-50 text-primary-600 border border-primary-200',
-    chip: 'bg-primary-500/15 text-primary-600',
-  },
-  completed: {
-    label: '완료',
-    tone: 'bg-emerald-50 text-emerald-600 border border-emerald-200',
-    chip: 'bg-emerald-500/15 text-emerald-600',
-  },
-};
-
 const statusFilters: Array<'all' | Trip['status']> = ['all', 'planning', 'ongoing', 'completed'];
 
 export default function TripsPage() {
   const { data: trips = [], isLoading: tripsLoading, isSuperAdmin } = useScopedTrips();
   const queryClient = useQueryClient();
+  const t = useTranslations();
   const [filter, setFilter] = useState<(typeof statusFilters)[number]>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [form, setForm] = useState<TripFormState>({ ...initialTripForm });
@@ -62,12 +46,12 @@ export default function TripsPage() {
       setForm({ ...initialTripForm });
       setShowCreateModal(false);
       setFormError(null);
-      setFormSuccess(`${createdTrip.title} 여행이 생성되었습니다.`);
+      setFormSuccess(`${createdTrip.title} ${t('trips.create.successSuffix')}`);
       await queryClient.invalidateQueries({ queryKey: ['trips'] });
     },
     onError: (error) => {
       const message =
-        error instanceof Error ? error.message : '여행 생성 중 오류가 발생했습니다.';
+        error instanceof Error ? error.message : t('trips.create.errorFallback');
       setFormError(message);
     },
   });
@@ -103,7 +87,7 @@ export default function TripsPage() {
     mutationFn: ({ tripId, managerId }: { tripId: number; managerId: number }) =>
       assignTripManager(tripId, managerId),
     onSuccess: async (updatedTrip) => {
-      setFormSuccess(`${updatedTrip.title} 담당자가 배정되었습니다.`);
+      setFormSuccess(`${updatedTrip.title} ${t('trips.assign.successSuffix')}`);
       setAssignTarget(null);
       setAssignManagerId(null);
       setAssignError(null);
@@ -111,7 +95,7 @@ export default function TripsPage() {
     },
     onError: (error) => {
       const message =
-        error instanceof Error ? error.message : '담당자 배정 중 오류가 발생했습니다.';
+        error instanceof Error ? error.message : t('trips.assign.errorFallback');
       setAssignError(message);
     },
   });
@@ -127,17 +111,17 @@ export default function TripsPage() {
     setFormSuccess(null);
 
     if (!form.title.trim() || !form.destination.trim()) {
-      setFormError('여행명과 목적지를 입력해 주세요.');
+      setFormError(t('trips.create.validation.titleDestination'));
       return;
     }
 
     if (!form.start_date || !form.end_date) {
-      setFormError('여행 시작일과 종료일을 모두 입력해 주세요.');
+      setFormError(t('trips.create.validation.datesRequired'));
       return;
     }
 
     if (new Date(form.end_date) < new Date(form.start_date)) {
-      setFormError('종료일은 시작일 이후여야 합니다.');
+      setFormError(t('trips.create.validation.dateOrder'));
       return;
     }
 
@@ -169,22 +153,45 @@ export default function TripsPage() {
 
   const tableColumnCount = canManageAssignments ? 6 : 5;
   const emptyTableMessage = filter === 'all'
-    ? (isSuperAdmin ? '등록된 여행이 없습니다.' : '담당된 여행이 아직 배정되지 않았습니다.')
-    : '조건에 해당하는 여행이 없습니다.';
+    ? (isSuperAdmin ? t('trips.table.emptySuperAdmin') : t('trips.table.emptyAssigned'))
+    : t('trips.table.emptyFilter');
+
+  const tripStatusMeta: Record<Trip['status'], { label: string; tone: string; chip: string }> = useMemo(
+    () => ({
+      planning: {
+        label: t('trips.status.planning'),
+        tone: 'bg-amber-50 text-amber-600 border border-amber-200',
+        chip: 'bg-amber-500/15 text-amber-600',
+      },
+      ongoing: {
+        label: t('trips.status.ongoing'),
+        tone: 'bg-primary-50 text-primary-600 border border-primary-200',
+        chip: 'bg-primary-500/15 text-primary-600',
+      },
+      completed: {
+        label: t('trips.status.completed'),
+        tone: 'bg-emerald-50 text-emerald-600 border border-emerald-200',
+        chip: 'bg-emerald-500/15 text-emerald-600',
+      },
+    }),
+    [t],
+  );
 
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">여행 포트폴리오</p>
-            <h1 className="mt-1 text-2xl font-bold text-slate-900">전체 여행 현황</h1>
-            <p className="mt-1 text-sm text-slate-500">상태별 진행 상황과 담당자를 한 눈에 파악하세요.</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">
+              {t('trips.header.badge')}
+            </p>
+            <h1 className="mt-1 text-2xl font-bold text-slate-900">{t('trips.header.title')}</h1>
+            <p className="mt-1 text-sm text-slate-500">{t('trips.header.subtitle')}</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <button className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600">
               <Filter className="h-4 w-4" />
-              고급 필터
+              {t('trips.header.advancedFilter')}
             </button>
             {canCreateTrips ? (
               <button
@@ -198,11 +205,11 @@ export default function TripsPage() {
                 className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700"
               >
                 <PlusCircle className="h-4 w-4" />
-                새 여행 만들기
+                {t('trips.header.createTrip')}
               </button>
             ) : (
               <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-400">
-                조회 전용 모드
+                {t('trips.header.readOnly')}
               </span>
             )}
           </div>
@@ -210,29 +217,29 @@ export default function TripsPage() {
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <TripSummaryCard
             icon={Plane}
-            title="전체 여행"
-            value={`${statusCounts.total}건`}
-            helper="등록된 모든 여행"
+            title={t('trips.summary.total.title')}
+            value={`${statusCounts.total} ${t('trips.summary.unit')}`}
+            helper={t('trips.summary.total.helper')}
           />
           <TripSummaryCard
             icon={CalendarRange}
-            title="진행 중"
-            value={`${statusCounts.ongoing}건`}
-            helper="실시간 운영 중"
+            title={t('trips.summary.ongoing.title')}
+            value={`${statusCounts.ongoing} ${t('trips.summary.unit')}`}
+            helper={t('trips.summary.ongoing.helper')}
             tone="bg-primary-500/10 text-primary-600"
           />
           <TripSummaryCard
             icon={MapPin}
-            title="계획 단계"
-            value={`${statusCounts.planning}건`}
-            helper="기획/견적 준비"
+            title={t('trips.summary.planning.title')}
+            value={`${statusCounts.planning} ${t('trips.summary.unit')}`}
+            helper={t('trips.summary.planning.helper')}
             tone="bg-amber-500/10 text-amber-600"
           />
           <TripSummaryCard
             icon={Users2}
-            title="완료 여행"
-            value={`${statusCounts.completed}건`}
-            helper="성과 분석 대상"
+            title={t('trips.summary.completed.title')}
+            value={`${statusCounts.completed} ${t('trips.summary.unit')}`}
+            helper={t('trips.summary.completed.helper')}
             tone="bg-emerald-500/10 text-emerald-600"
           />
         </div>
@@ -241,13 +248,13 @@ export default function TripsPage() {
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">여행 목록</h2>
-            <p className="text-sm text-slate-500">진행 단계별로 필터링하고 담당자를 확인하세요.</p>
+            <h2 className="text-lg font-semibold text-slate-900">{t('trips.table.title')}</h2>
+            <p className="text-sm text-slate-500">{t('trips.table.subtitle')}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {statusFilters.map((item) => {
               const isActive = item === filter;
-              const label = item === 'all' ? '전체' : tripStatusMeta[item].label;
+              const label = item === 'all' ? t('trips.filters.all') : tripStatusMeta[item].label;
               return (
                 <button
                   key={item}
@@ -270,19 +277,21 @@ export default function TripsPage() {
           <table className="min-w-full divide-y divide-slate-100 text-sm">
             <thead className="bg-[#F7F9FC] text-slate-500">
               <tr>
-                <th className="px-5 py-3 text-left font-semibold">여행명</th>
-                <th className="px-5 py-3 text-left font-semibold">기간</th>
-                <th className="px-5 py-3 text-left font-semibold">담당자</th>
-                <th className="px-5 py-3 text-left font-semibold">상태</th>
-                <th className="px-5 py-3 text-right font-semibold">참가자</th>
-                {canManageAssignments && <th className="px-5 py-3 text-right font-semibold">관리</th>}
+                <th className="px-5 py-3 text-left font-semibold">{t('trips.table.headers.trip')}</th>
+                <th className="px-5 py-3 text-left font-semibold">{t('trips.table.headers.period')}</th>
+                <th className="px-5 py-3 text-left font-semibold">{t('trips.table.headers.manager')}</th>
+                <th className="px-5 py-3 text-left font-semibold">{t('trips.table.headers.status')}</th>
+                <th className="px-5 py-3 text-right font-semibold">{t('trips.table.headers.participants')}</th>
+                {canManageAssignments && (
+                  <th className="px-5 py-3 text-right font-semibold">{t('trips.table.headers.actions')}</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {tripsLoading && (
                 <tr>
                   <td colSpan={tableColumnCount} className="px-5 py-6 text-center text-sm text-slate-500">
-                    여행 정보를 불러오는 중입니다.
+                    {t('trips.table.loading')}
                   </td>
                 </tr>
               )}
@@ -301,14 +310,16 @@ export default function TripsPage() {
                     <td className="px-5 py-4 text-slate-600">
                       {trip.start_date} ~ {trip.end_date}
                     </td>
-                    <td className="px-5 py-4 text-slate-600">{trip.manager_name ?? '담당자 미지정'}</td>
+                    <td className="px-5 py-4 text-slate-600">{trip.manager_name ?? t('trips.table.managerUnassigned')}</td>
                     <td className="px-5 py-4">
                       <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${status.tone}`}>
                         <span className={`h-2 w-2 rounded-full ${status.chip}`} />
                         {status.label}
                       </span>
                     </td>
-                    <td className="px-5 py-4 text-right text-slate-600">{trip.participant_count ?? 0}명</td>
+                    <td className="px-5 py-4 text-right text-slate-600">
+                      {trip.participant_count ?? 0} {t('trips.table.participantUnit')}
+                    </td>
                     {canManageAssignments && (
                       <td className="px-5 py-4 text-right">
                         <button
@@ -320,7 +331,7 @@ export default function TripsPage() {
                           }}
                           className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-4 py-2 text-xs font-semibold text-primary-600 shadow-sm transition hover:bg-primary-100"
                         >
-                          <UserCog className="h-4 w-4" /> 담당자 배정
+                          <UserCog className="h-4 w-4" /> {t('trips.table.assignAction')}
                         </button>
                       </td>
                     )}
@@ -343,15 +354,17 @@ export default function TripsPage() {
           <div className="w-full max-w-lg rounded-3xl border border-slate-100 bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">새로운 여행</p>
-                <h2 className="mt-1 text-xl font-bold text-slate-900">여행 기본 정보를 입력하세요</h2>
-                <p className="mt-1 text-sm text-slate-500">날짜와 상태는 추후에도 수정할 수 있습니다.</p>
+                <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">
+                  {t('trips.create.modal.badge')}
+                </p>
+                <h2 className="mt-1 text-xl font-bold text-slate-900">{t('trips.create.modal.title')}</h2>
+                <p className="mt-1 text-sm text-slate-500">{t('trips.create.modal.description')}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowCreateModal(false)}
                 className="rounded-full border border-slate-200 p-1.5 text-slate-400 transition hover:border-primary-200 hover:text-primary-600"
-                aria-label="닫기"
+                aria-label={t('trips.create.modal.closeAria')}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -366,7 +379,7 @@ export default function TripsPage() {
             <form className="mt-5 space-y-4" onSubmit={handleCreateTrip}>
               <div className="space-y-2">
                 <label htmlFor="trip-title" className="text-sm font-semibold text-slate-700">
-                  여행명
+                  {t('trips.create.form.titleLabel')}
                 </label>
                 <input
                   id="trip-title"
@@ -374,14 +387,14 @@ export default function TripsPage() {
                   value={form.title}
                   onChange={(event) => handleFormChange('title')(event.target.value)}
                   className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
-                  placeholder="예: 히말라야 트레킹"
+                  placeholder={t('trips.create.form.titlePlaceholder')}
                   required
                 />
               </div>
 
               <div className="space-y-2">
                 <label htmlFor="trip-destination" className="text-sm font-semibold text-slate-700">
-                  목적지
+                  {t('trips.create.form.destinationLabel')}
                 </label>
                 <input
                   id="trip-destination"
@@ -389,7 +402,7 @@ export default function TripsPage() {
                   value={form.destination}
                   onChange={(event) => handleFormChange('destination')(event.target.value)}
                   className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
-                  placeholder="예: 네팔 카트만두"
+                  placeholder={t('trips.create.form.destinationPlaceholder')}
                   required
                 />
               </div>
@@ -397,7 +410,7 @@ export default function TripsPage() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <label htmlFor="trip-start" className="text-sm font-semibold text-slate-700">
-                    시작일
+                    {t('trips.create.form.startDateLabel')}
                   </label>
                   <input
                     id="trip-start"
@@ -410,7 +423,7 @@ export default function TripsPage() {
                 </div>
                 <div className="space-y-2">
                   <label htmlFor="trip-end" className="text-sm font-semibold text-slate-700">
-                    종료일
+                    {t('trips.create.form.endDateLabel')}
                   </label>
                   <input
                     id="trip-end"
@@ -429,14 +442,14 @@ export default function TripsPage() {
                   onClick={() => setShowCreateModal(false)}
                   className="rounded-full border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600"
                 >
-                  취소
+                  {t('trips.create.form.cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={createTripMutation.isLoading}
                   className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {createTripMutation.isLoading ? '생성 중...' : '여행 생성'}
+                  {createTripMutation.isLoading ? t('trips.create.form.submitting') : t('trips.create.form.submit')}
                 </button>
               </div>
             </form>
@@ -449,9 +462,11 @@ export default function TripsPage() {
           <div className="w-full max-w-md rounded-3xl border border-slate-100 bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">담당자 배정</p>
+                <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">
+                  {t('trips.assign.modal.badge')}
+                </p>
                 <h2 className="mt-1 text-xl font-bold text-slate-900">{assignTarget.title}</h2>
-                <p className="mt-1 text-sm text-slate-500">승인된 직원 중 담당자를 선택해 배정하세요.</p>
+                <p className="mt-1 text-sm text-slate-500">{t('trips.assign.modal.description')}</p>
               </div>
               <button
                 type="button"
@@ -461,7 +476,7 @@ export default function TripsPage() {
                   setAssignError(null);
                 }}
                 className="rounded-full border border-slate-200 p-1.5 text-slate-400 transition hover:border-primary-200 hover:text-primary-600"
-                aria-label="담당자 배정 창 닫기"
+                aria-label={t('trips.assign.modal.closeAria')}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -479,7 +494,7 @@ export default function TripsPage() {
                 event.preventDefault();
                 if (!assignTarget) return;
                 if (!assignManagerId) {
-                  setAssignError('담당자를 선택해 주세요.');
+                  setAssignError(t('trips.assign.validation.selectManager'));
                   return;
                 }
                 setAssignError(null);
@@ -488,15 +503,15 @@ export default function TripsPage() {
             >
               <div className="space-y-2">
                 <label htmlFor="trip-manager" className="text-sm font-semibold text-slate-700">
-                  담당자 선택
+                  {t('trips.assign.form.managerLabel')}
                 </label>
                 {staffLoading ? (
                   <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                    담당자 목록을 불러오는 중입니다.
+                    {t('trips.assign.form.loadingManagers')}
                   </div>
                 ) : staffDirectory.length === 0 ? (
                   <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-600">
-                    승인된 직원이 없어 담당자를 배정할 수 없습니다.
+                    {t('trips.assign.form.noManagers')}
                   </div>
                 ) : (
                   <select
@@ -519,8 +534,8 @@ export default function TripsPage() {
               </div>
 
               <div className="rounded-2xl bg-[#F7F9FC] px-4 py-3 text-xs text-slate-500">
-                현재 담당자 ·{' '}
-                <span className="font-semibold text-slate-700">{assignTarget.manager_name ?? '미지정'}</span>
+                {t('trips.assign.form.currentLabel')} ·{' '}
+                <span className="font-semibold text-slate-700">{assignTarget.manager_name ?? t('trips.assign.form.currentFallback')}</span>
               </div>
 
               <div className="flex justify-end gap-3 pt-2">
@@ -533,14 +548,16 @@ export default function TripsPage() {
                   }}
                   className="rounded-full border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600"
                 >
-                  취소
+                  {t('trips.assign.form.cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={assignManagerMutation.isLoading || staffDirectory.length === 0}
                   className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {assignManagerMutation.isLoading ? '배정 중...' : '담당자 저장'}
+                  {assignManagerMutation.isLoading
+                    ? t('trips.assign.form.submitting')
+                    : t('trips.assign.form.submit')}
                 </button>
               </div>
             </form>
