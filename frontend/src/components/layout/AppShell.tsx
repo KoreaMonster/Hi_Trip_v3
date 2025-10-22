@@ -22,30 +22,35 @@ import { postLogout } from '@/lib/api';
 import { ApiError } from '@/lib/http';
 import { useProfileQuery } from '@/lib/queryHooks';
 import { useUserStore } from '@/stores/useUserStore';
+import LanguageSwitch from '@/components/LanguageSwitch';
+import { useTranslations, type TranslationKey } from '@/lib/i18n';
+import { useLocale } from '@/stores/useLocaleStore';
 
 interface NavItem {
   href: string;
-  label: string;
+  labelKey: TranslationKey;
   icon: LucideIcon;
   group?: 'pre' | 'mid';
   placement?: 'top' | 'bottom';
 }
 
 const BASE_NAV_ITEMS: NavItem[] = [
-  { href: '/', label: '대시보드', icon: LayoutDashboard, placement: 'top' },
-  { href: '/trips', label: '여행 전 여행 관리', icon: Plane, group: 'pre' },
-  { href: '/schedules', label: '여행 전 일정 관리', icon: CalendarDays, group: 'pre' },
-  { href: '/participants', label: '여행 전 고객 관리', icon: Users, group: 'pre' },
-  { href: '/monitoring', label: '여행 중 고객 관리', icon: HeartPulse, group: 'mid' },
-  { href: '/places', label: '여행 중 추천', icon: Sparkles, group: 'mid' },
-  { href: '/settings', label: '설정', icon: Settings, placement: 'bottom' },
+  { href: '/', labelKey: 'app.nav.dashboard', icon: LayoutDashboard, placement: 'top' },
+  { href: '/trips', labelKey: 'app.nav.tripManagement', icon: Plane, group: 'pre' },
+  { href: '/schedules', labelKey: 'app.nav.scheduleManagement', icon: CalendarDays, group: 'pre' },
+  { href: '/participants', labelKey: 'app.nav.participantManagement', icon: Users, group: 'pre' },
+  { href: '/monitoring', labelKey: 'app.nav.monitoring', icon: HeartPulse, group: 'mid' },
+  { href: '/places', labelKey: 'app.nav.recommendations', icon: Sparkles, group: 'mid' },
+  { href: '/settings', labelKey: 'app.nav.settings', icon: Settings, placement: 'bottom' },
 ];
 
 const SUPER_ADMIN_NAV_ITEMS: NavItem[] = [
-  { href: '/approvals', label: '승인 센터', icon: ShieldCheck, placement: 'top' },
+  { href: '/approvals', labelKey: 'app.nav.approvals', icon: ShieldCheck, placement: 'top' },
 ];
 
 export default function AppShell({ children }: { children: ReactNode }) {
+  const t = useTranslations();
+  const locale = useLocale();
   const pathname = usePathname();
   const router = useRouter();
   const { user, setUser, logout: clearUser } = useUserStore();
@@ -101,18 +106,30 @@ export default function AppShell({ children }: { children: ReactNode }) {
       return;
     }
 
-    setAuthError(profileError?.message ?? '사용자 정보를 불러오지 못했습니다.');
-  }, [isProfileError, profileError, clearUser, router]);
+    setAuthError(profileError?.message ?? t('app.authError.description'));
+  }, [isProfileError, profileError, clearUser, router, t]);
 
   const initials = useMemo(() => {
-    const name = user?.full_name_kr ?? profile?.full_name_kr ?? '';
-    if (!name) return 'HT';
-    const compact = name.replace(/\s+/g, '');
+    const baseName =
+      locale === 'en'
+        ? user?.full_name_en ?? profile?.full_name_en ?? user?.full_name_kr ?? profile?.full_name_kr ?? ''
+        : user?.full_name_kr ?? profile?.full_name_kr ?? user?.full_name_en ?? profile?.full_name_en ?? '';
+
+    if (!baseName) return 'HT';
+    const compact = baseName.replace(/\s+/g, '');
     if (compact.length >= 2) {
-      return compact.slice(-2);
+      return compact.slice(-2).toUpperCase();
     }
     return compact.charAt(0).toUpperCase();
-  }, [profile?.full_name_kr, user?.full_name_kr]);
+  }, [locale, profile?.full_name_en, profile?.full_name_kr, user?.full_name_en, user?.full_name_kr]);
+
+  const displayName = useMemo(() => {
+    const fallback = t('app.user.fallback');
+    if (locale === 'en') {
+      return user?.full_name_en ?? profile?.full_name_en ?? fallback;
+    }
+    return user?.full_name_kr ?? profile?.full_name_kr ?? fallback;
+  }, [locale, profile?.full_name_en, profile?.full_name_kr, t, user?.full_name_en, user?.full_name_kr]);
 
   const availableNavItems = useMemo(() => {
     const role = user?.role ?? profile?.role;
@@ -134,11 +151,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
     const matched = availableNavItems.find((item) =>
       item.href === '/' ? pathname === '/' : pathname.startsWith(item.href),
     );
-    return matched?.label ?? 'HI-TRIP 운영센터';
-  }, [availableNavItems, pathname]);
+    return matched ? t(matched.labelKey) : t('app.header.titleFallback');
+  }, [availableNavItems, pathname, t]);
 
   const renderNav = (item: NavItem) => {
     const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+    const label = t(item.labelKey);
     return (
       <Link
         key={item.href}
@@ -153,7 +171,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <item.icon
           className={`h-4 w-4 ${isActive ? 'text-primary-500' : 'text-slate-400 group-hover:text-primary-500'}`}
         />
-        <span>{item.label}</span>
+        <span>{label}</span>
       </Link>
     );
   };
@@ -166,7 +184,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       clearUser();
       router.replace('/login');
     } catch (error) {
-      const message = error instanceof Error ? error.message : '로그아웃 처리 중 오류가 발생했습니다.';
+      const message = error instanceof Error && error.message ? error.message : t('app.logout.error');
       setLogoutError(message);
     } finally {
       setLogoutBusy(false);
@@ -175,11 +193,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   if (isProfileLoading && !user) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#F7F9FC] text-slate-500">
+      <div className="relative flex min-h-screen flex-col items-center justify-center bg-[#F7F9FC] text-slate-500">
+        <div className="absolute left-6 top-6">
+          <LanguageSwitch />
+        </div>
         <div className="rounded-3xl border border-slate-200 bg-white px-10 py-12 text-center shadow-xl">
           <p className="text-sm font-semibold text-primary-500">HI-TRIP</p>
-          <p className="mt-3 text-lg font-semibold text-slate-900">사용자 정보를 불러오는 중입니다.</p>
-          <p className="mt-2 text-sm text-slate-500">잠시만 기다려 주세요.</p>
+          <p className="mt-3 text-lg font-semibold text-slate-900">{t('app.loading.title')}</p>
+          <p className="mt-2 text-sm text-slate-500">{t('app.loading.subtitle')}</p>
         </div>
       </div>
     );
@@ -187,10 +208,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   if (authError && !user) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#F7F9FC] px-6 py-12 text-slate-600">
+      <div className="relative flex min-h-screen flex-col items-center justify-center bg-[#F7F9FC] px-6 py-12 text-slate-600">
+        <div className="absolute left-6 top-6">
+          <LanguageSwitch />
+        </div>
         <div className="w-full max-w-md rounded-3xl border border-rose-200 bg-white px-8 py-10 text-center shadow-2xl">
-          <p className="text-sm font-semibold uppercase tracking-widest text-rose-500">접속 오류</p>
-          <h1 className="mt-3 text-2xl font-bold text-slate-900">운영 센터에 연결하지 못했습니다</h1>
+          <p className="text-sm font-semibold uppercase tracking-widest text-rose-500">{t('app.authError.badge')}</p>
+          <h1 className="mt-3 text-2xl font-bold text-slate-900">{t('app.authError.title')}</h1>
           <p className="mt-3 text-sm leading-relaxed text-slate-600">{authError}</p>
           <div className="mt-6 flex flex-col gap-3">
             <button
@@ -201,14 +225,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
               }}
               className="w-full rounded-full bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700"
             >
-              다시 시도
+              {t('app.authError.retry')}
             </button>
             <button
               type="button"
               onClick={() => router.replace('/login')}
               className="w-full rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600"
             >
-              로그인 화면으로 이동
+              {t('app.authError.gotoLogin')}
             </button>
           </div>
         </div>
@@ -221,7 +245,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       {sidebarOpen && (
         <button
           type="button"
-          aria-label="사이드바 닫기"
+          aria-label={t('app.aria.closeSidebar')}
           className="fixed inset-0 z-30 bg-slate-900/30 backdrop-blur-sm lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
@@ -238,7 +262,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </div>
           <div>
             <p className="text-lg font-bold text-slate-900">HI-TRIP</p>
-            <p className="text-xs text-slate-400">여행 운영 플랫폼</p>
+            <p className="text-xs text-slate-400">{t('app.brand.tagline')}</p>
           </div>
         </div>
 
@@ -247,14 +271,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
           {navSections.pre.length > 0 && (
             <div className="flex flex-col gap-2">
-              <p className="px-3 text-xs font-semibold uppercase tracking-widest text-slate-400">여행 전 관리</p>
+              <p className="px-3 text-xs font-semibold uppercase tracking-widest text-slate-400">{t('app.nav.preSection')}</p>
               <div className="flex flex-col gap-1">{navSections.pre.map(renderNav)}</div>
             </div>
           )}
 
           {navSections.mid.length > 0 && (
             <div className="flex flex-col gap-2">
-              <p className="px-3 text-xs font-semibold uppercase tracking-widest text-slate-400">여행 중 관리</p>
+              <p className="px-3 text-xs font-semibold uppercase tracking-widest text-slate-400">{t('app.nav.midSection')}</p>
               <div className="flex flex-col gap-1">{navSections.mid.map(renderNav)}</div>
             </div>
           )}
@@ -264,10 +288,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
         <div className="mt-auto px-6 py-6">
           <div className="rounded-xl border border-slate-200 bg-[#E8F1FF] p-4 text-sm text-slate-600">
-            <p className="font-semibold text-slate-800">신규 기능 안내</p>
-            <p className="mt-2 text-xs leading-relaxed text-slate-500">
-              팀 협업을 위한 실시간 편집 기능이 곧 업데이트 됩니다. 알림을 켜고 가장 먼저 받아보세요!
-            </p>
+            <p className="font-semibold text-slate-800">{t('app.nav.newFeature.title')}</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-500">{t('app.nav.newFeature.body')}</p>
           </div>
         </div>
       </aside>
@@ -275,16 +297,17 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <div className="flex w-full flex-1 flex-col lg:ml-0">
         <header className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white/95 px-6 py-4 backdrop-blur">
           <div className="flex items-center gap-3">
+            <LanguageSwitch />
             <button
               type="button"
               className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600 lg:hidden"
               onClick={() => setSidebarOpen((prev) => !prev)}
-              aria-label="사이드바 열기"
+              aria-label={t('app.aria.openSidebar')}
             >
               <Menu className="h-5 w-5" />
             </button>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">운영 센터</p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">{t('app.header.section')}</p>
               <h1 className="text-lg font-semibold text-slate-900">{currentTitle}</h1>
             </div>
           </div>
@@ -294,15 +317,18 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <Sparkles className="h-4 w-4 text-primary-500" />
               <input
                 type="search"
-                placeholder="여행, 고객, 일정 검색"
+                placeholder={t('app.header.searchPlaceholder')}
                 className="w-full border-none bg-transparent placeholder:text-slate-400 focus:outline-none"
               />
             </div>
             <button className="hidden items-center gap-2 rounded-full bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 lg:inline-flex">
               <LifeBuoy className="h-4 w-4" />
-              지원 요청
+              {t('app.header.support')}
             </button>
-            <button className="relative rounded-full border border-slate-200 bg-white p-2 text-slate-500 shadow-sm transition hover:border-primary-200 hover:text-primary-600">
+            <button
+              className="relative rounded-full border border-slate-200 bg-white p-2 text-slate-500 shadow-sm transition hover:border-primary-200 hover:text-primary-600"
+              aria-label={t('app.header.notifications')}
+            >
               <Bell className="h-5 w-5" />
               <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-rose-500" />
             </button>
@@ -311,7 +337,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 {initials}
               </div>
               <div>
-                <p className="text-sm font-semibold text-slate-900">{user?.full_name_kr ?? profile?.full_name_kr ?? '운영자'}</p>
+                <p className="text-sm font-semibold text-slate-900">{displayName}</p>
                 <p className="text-[11px] text-slate-500">{user?.role_display ?? profile?.role_display ?? 'Operations'}</p>
               </div>
             </div>
@@ -322,7 +348,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500 shadow-sm transition hover:border-primary-200 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <LogOut className="h-4 w-4" />
-              {logoutBusy ? '로그아웃 중...' : '로그아웃'}
+              {logoutBusy ? t('app.header.loggingOut') : t('app.header.logout')}
             </button>
           </div>
         </header>
@@ -338,7 +364,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <main className="flex-1 px-6 pb-10 pt-8">
           {isProfileFetching && (
             <div className="mx-auto mb-4 max-w-[1320px] rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs text-slate-500 shadow-sm">
-              사용자 세션을 확인하는 중입니다...
+              {t('app.session.checking')}
             </div>
           )}
           <div className="mx-auto max-w-[1320px] space-y-6">{children}</div>

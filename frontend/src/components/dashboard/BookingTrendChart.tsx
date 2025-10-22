@@ -9,6 +9,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { useTranslations } from '@/lib/i18n';
 
 export type BookingTrendPoint = {
   label: string;
@@ -20,10 +21,14 @@ interface BookingTrendChartProps {
 }
 
 export default function BookingTrendChart({ data }: BookingTrendChartProps) {
+  const t = useTranslations();
+  const axisSuffix = t('dashboard.trend.axisSuffix');
+  const tooltipLabel = t('dashboard.trend.tooltip');
+
   if (!data.length) {
     return (
       <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500">
-        최근 6개월 동안 등록된 여행이 없습니다.
+        {t('dashboard.trend.empty')}
       </div>
     );
   }
@@ -39,7 +44,12 @@ export default function BookingTrendChart({ data }: BookingTrendChartProps) {
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
         <XAxis dataKey="label" stroke="#A0AEC0" tickLine={false} axisLine={{ stroke: '#E2E8F0' }} />
-        <YAxis stroke="#A0AEC0" tickLine={false} axisLine={{ stroke: '#E2E8F0' }} tickFormatter={(v) => `${v}건`} />
+        <YAxis
+          stroke="#A0AEC0"
+          tickLine={false}
+          axisLine={{ stroke: '#E2E8F0' }}
+          tickFormatter={(value) => `${value}${axisSuffix}`}
+        />
         <Tooltip
           cursor={{ stroke: '#5B8DEF', strokeWidth: 1 }}
           contentStyle={{
@@ -49,7 +59,7 @@ export default function BookingTrendChart({ data }: BookingTrendChartProps) {
             fontSize: 12,
           }}
           labelStyle={{ color: '#4A5568', fontWeight: 600 }}
-          formatter={(value: number) => [`${value}건`, '예약 수']}
+          formatter={(value: number) => [`${value}${axisSuffix}`, tooltipLabel]}
         />
         <Area
           type="monotone"

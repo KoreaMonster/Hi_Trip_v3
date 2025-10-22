@@ -22,7 +22,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ko" className={`${notoSans.variable} ${inter.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${notoSans.variable} ${inter.variable}`} suppressHydrationWarning>
       <body className="min-h-screen bg-[#F7F9FC] font-[var(--font-noto-sans)] text-[#4A5568]">
         <Providers>{children}</Providers>
       </body>
