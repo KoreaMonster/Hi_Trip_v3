@@ -209,12 +209,36 @@ MEDIA_ROOT = BASE_DIR / 'media'
 GOOGLE_MAPS_API_KEY = config("GOOGLE_MAPS_API_KEY", default="")
 PERPLEXITY_API_KEY = config("PERPLEXITY_API_KEY", default="")
 
+import os
 
+# 환경 변수
 ENVIRONMENT = config('ENVIRONMENT', default='production')
+DEBUG = config('DEBUG', default=False, cast=bool)
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-l(i$#zrc*y$ry$5pm&0eef5q$=_7jvfmiy7xz=5h6dpkr7kj7)')
+
+# ALLOWED_HOSTS 추가
+if ENVIRONMENT == 'production':
+    ALLOWED_HOSTS = ['*', '.elasticbeanstalk.com', '.amplifyapp.com']
+else:
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*']
+
+# Static files
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # S3 설정 (AWS 배포시에만 사용)
 if ENVIRONMENT == 'production':
+    # django-storages 설치 필요
     AWS_ACCESS_KEY_ID = config('AWS_ACCESS_KEY_ID')
     AWS_SECRET_ACCESS_KEY = config('AWS_SECRET_ACCESS_KEY')
     AWS_STORAGE_BUCKET_NAME = config('AWS_STORAGE_BUCKET_NAME')
+    AWS_S3_REGION_NAME = config('AWS_S3_REGION_NAME', default='eu-west-1')
+    AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
+
+    # S3를 미디어 파일 저장소로 사용
     DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+    MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
+else:
+    # 로컬 환경
+    MEDIA_URL = '/media/'
+    MEDIA_ROOT = BASE_DIR / 'media'
