@@ -238,47 +238,57 @@ else:
 # Static files
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+#
+# # Database 설정 - 환경별로 완전히 분리
+# # Database 설정 - 환경별로 완전히 분리
+# if ENVIRONMENT == 'production':
+#     # Railway/AWS RDS - 환경변수가 없으면 SQLite 사용
+#     DATABASES = {
+#         'default': {
+#             'ENGINE': 'django.db.backends.postgresql',
+#             'NAME': config('DB_NAME', default='railway'),
+#             'USER': config('DB_USER', default='postgres'),
+#             'PASSWORD': config('DB_PASSWORD', default=''),
+#             'HOST': config('DB_HOST', default='localhost'),
+#             'PORT': config('DB_PORT', default='5432'),
+#         }
+#     }
+# else:
+#     # 로컬 개발 - SQLite 사용 (간단!)
+#     DATABASES = {
+#         'default': {
+#             'ENGINE': 'django.db.backends.sqlite3',
+#             'NAME': BASE_DIR / 'db.sqlite3',
+#         }
+#     }
+#
+# # S3 설정 (AWS 배포시에만 사용)
+# # S3 설정 (AWS 배포시에만 사용)
+# if ENVIRONMENT == 'production':
+#     AWS_ACCESS_KEY_ID = config('AWS_ACCESS_KEY_ID', default='')
+#     AWS_SECRET_ACCESS_KEY = config('AWS_SECRET_ACCESS_KEY', default='')
+#     AWS_STORAGE_BUCKET_NAME = config('AWS_STORAGE_BUCKET_NAME', default='')
+#     AWS_S3_REGION_NAME = config('AWS_S3_REGION_NAME', default='eu-central-1')
+#
+#     # S3 설정이 있을 때만 사용
+#     if AWS_ACCESS_KEY_ID and AWS_STORAGE_BUCKET_NAME:
+#         AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
+#         DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+#         MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
+#     else:
+#         # S3 설정 없으면 로컬 미디어 사용
+#         MEDIA_URL = '/media/'
+#         MEDIA_ROOT = BASE_DIR / 'media'
+# else:
+#     MEDIA_URL = '/media/'
+#     MEDIA_ROOT = BASE_DIR / 'media'
 
-# Database 설정 - 환경별로 완전히 분리
-# Database 설정 - 환경별로 완전히 분리
-if ENVIRONMENT == 'production':
-    # Railway/AWS RDS - 환경변수가 없으면 SQLite 사용
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': config('DB_NAME', default='railway'),
-            'USER': config('DB_USER', default='postgres'),
-            'PASSWORD': config('DB_PASSWORD', default=''),
-            'HOST': config('DB_HOST', default='localhost'),
-            'PORT': config('DB_PORT', default='5432'),
-        }
+# ============================================
+# Database 설정 - SQLite로 통일
+# ============================================
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
-else:
-    # 로컬 개발 - SQLite 사용 (간단!)
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
-
-# S3 설정 (AWS 배포시에만 사용)
-# S3 설정 (AWS 배포시에만 사용)
-if ENVIRONMENT == 'production':
-    AWS_ACCESS_KEY_ID = config('AWS_ACCESS_KEY_ID', default='')
-    AWS_SECRET_ACCESS_KEY = config('AWS_SECRET_ACCESS_KEY', default='')
-    AWS_STORAGE_BUCKET_NAME = config('AWS_STORAGE_BUCKET_NAME', default='')
-    AWS_S3_REGION_NAME = config('AWS_S3_REGION_NAME', default='eu-central-1')
-
-    # S3 설정이 있을 때만 사용
-    if AWS_ACCESS_KEY_ID and AWS_STORAGE_BUCKET_NAME:
-        AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
-        DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
-        MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
-    else:
-        # S3 설정 없으면 로컬 미디어 사용
-        MEDIA_URL = '/media/'
-        MEDIA_ROOT = BASE_DIR / 'media'
-else:
-    MEDIA_URL = '/media/'
-    MEDIA_ROOT = BASE_DIR / 'media'
+}
