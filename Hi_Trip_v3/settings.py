@@ -19,6 +19,7 @@ ALLOWED_HOSTS = [
     '127.0.0.1',
         '.ngrok-free.dev',
     '18.194.229.54',
+    '*.up.railway.app',  # Railway 도메인 전체 허용
     '*',
 '<ngrok-generated-domain>'
 ]
