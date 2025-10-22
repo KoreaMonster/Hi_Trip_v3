@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ChevronDown,
@@ -21,6 +21,15 @@ import type { MonitoringAlert, ParticipantLatest, Trip, TripParticipant } from '
 
 type RiskLevel = 'normal' | 'warning' | 'critical' | 'offline';
 
+type SimulatedMetrics = {
+  heartRate: number;
+  spo2: number;
+  alerts: number;
+  level: RiskLevel;
+};
+
+const SIMULATION_INTERVAL = 5000;
+
 const riskTone: Record<RiskLevel, string> = {
   normal: 'bg-emerald-50 text-emerald-600 border-emerald-200',
   warning: 'bg-amber-50 text-amber-600 border-amber-200',
@@ -33,6 +42,37 @@ const riskLabel: Record<RiskLevel, string> = {
   warning: '주의',
   critical: '위험',
   offline: '연결 대기',
+};
+
+const randomBetween = (min: number, max: number) => Math.random() * (max - min) + min;
+
+const evaluateRiskFromMetrics = (heartRate: number, spo2: number): RiskLevel => {
+  if (spo2 <= 90 || heartRate >= 120) {
+    return 'critical';
+  }
+  if (spo2 <= 94 || heartRate >= 105) {
+    return 'warning';
+  }
+  return 'normal';
+};
+
+const generateSimulatedMetrics = (
+  previous: SimulatedMetrics | null,
+  options: { initial?: boolean } = {},
+): SimulatedMetrics => {
+  const { initial = false } = options;
+  const heartBase = previous ? previous.heartRate : randomBetween(68, 96);
+  const heartVariation = initial ? randomBetween(-10, 10) : randomBetween(-6, 7);
+  const heartRate = Math.round(Math.min(140, Math.max(55, heartBase + heartVariation)));
+
+  const spo2Base = previous ? previous.spo2 : randomBetween(93, 98);
+  const spo2Variation = initial ? randomBetween(-3, 2.5) : randomBetween(-1.8, 1.8);
+  const spo2 = Math.round(Math.min(99, Math.max(85, spo2Base + spo2Variation)));
+
+  const level = evaluateRiskFromMetrics(heartRate, spo2);
+  const alerts = level === 'critical' ? 2 : level === 'warning' ? 1 : 0;
+
+  return { heartRate, spo2, alerts, level };
 };
 
 const formatDate = (value?: string | null) => {
@@ -57,6 +97,10 @@ type ParticipantRow = {
   level: RiskLevel;
 };
 
+type ParticipantDisplayRow = ParticipantRow & {
+  simulation: SimulatedMetrics | null;
+};
+
 export default function MonitoringPage() {
   const {
     data: trips = [],
@@ -65,6 +109,10 @@ export default function MonitoringPage() {
   } = useScopedTrips();
   const [selectedTripId, setSelectedTripId] = useState<number | null>(null);
   const [keyword, setKeyword] = useState('');
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [simulationData, setSimulationData] = useState<Map<number, SimulatedMetrics>>(new Map());
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  const simulationTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const sortedTrips = useMemo(() => {
     const statusPriority: Record<Trip['status'], number> = { ongoing: 0, planning: 1, completed: 2 };
@@ -191,43 +239,128 @@ export default function MonitoringPage() {
     }
     return participantRows.filter((row) => {
       const { traveler } = row.participant;
-      return [traveler.full_name_kr, traveler.phone, traveler.email]
+      return [traveler.full_name_kr, traveler.phone]
         .filter((value): value is string => typeof value === 'string' && value.length > 0)
         .some((value) => value.toLowerCase().includes(normalized));
     });
   }, [keyword, participantRows]);
 
-  const sortedRows = useMemo(() => {
+  const displayRows = useMemo<ParticipantDisplayRow[]>(() => {
+    return filteredRows.map((row) => {
+      if (!isSimulating) {
+        return { ...row, simulation: null };
+      }
+      const metrics = simulationData.get(row.participant.id) ?? null;
+      if (!metrics) {
+        return { ...row, simulation: null };
+      }
+      return {
+        ...row,
+        level: metrics.level,
+        simulation: metrics,
+      };
+    });
+  }, [filteredRows, isSimulating, simulationData]);
+
+  const sortedRows = useMemo<ParticipantDisplayRow[]>(() => {
     const levelPriority: Record<RiskLevel, number> = { critical: 0, warning: 1, normal: 2, offline: 3 };
-    return [...filteredRows].sort((a, b) => {
+    return [...displayRows].sort((a, b) => {
       const levelDiff = levelPriority[a.level] - levelPriority[b.level];
       if (levelDiff !== 0) return levelDiff;
       return a.participant.traveler.full_name_kr.localeCompare(b.participant.traveler.full_name_kr);
     });
-  }, [filteredRows]);
+  }, [displayRows]);
 
   const totalCritical = useMemo(
-    () => participantRows.filter((row) => row.level === 'critical').length,
-    [participantRows],
+    () => displayRows.filter((row) => row.level === 'critical').length,
+    [displayRows],
   );
   const totalWarning = useMemo(
-    () => participantRows.filter((row) => row.level === 'warning').length,
-    [participantRows],
+    () => displayRows.filter((row) => row.level === 'warning').length,
+    [displayRows],
   );
   const totalOffline = useMemo(
-    () => participantRows.filter((row) => row.level === 'offline').length,
-    [participantRows],
+    () => displayRows.filter((row) => row.level === 'offline').length,
+    [displayRows],
   );
 
   const overallLevel: RiskLevel = useMemo(() => {
-    if (participantRows.length === 0) {
+    if (displayRows.length === 0) {
       return 'offline';
     }
     if (totalCritical > 0) return 'critical';
     if (totalWarning > 0) return 'warning';
-    if (totalOffline === participantRows.length) return 'offline';
+    if (totalOffline === displayRows.length) return 'offline';
     return 'normal';
-  }, [participantRows.length, totalCritical, totalWarning, totalOffline]);
+  }, [displayRows.length, totalCritical, totalWarning, totalOffline]);
+
+  const visibleCount = sortedRows.length;
+
+  const handleStartSimulation = useCallback(() => {
+    if (!selectedTrip || visibleCount === 0) {
+      return;
+    }
+    setIsSimulating(true);
+  }, [selectedTrip, visibleCount]);
+
+  const handleStopSimulation = useCallback(() => {
+    setIsSimulating(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isSimulating) {
+      setSimulationData(new Map());
+      setLastUpdatedAt(null);
+      if (simulationTimerRef.current) {
+        clearInterval(simulationTimerRef.current);
+        simulationTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (filteredRows.length === 0) {
+      setSimulationData(new Map());
+      setLastUpdatedAt(null);
+      return;
+    }
+
+    setSimulationData((prev) => {
+      const next = new Map<number, SimulatedMetrics>();
+      filteredRows.forEach((row) => {
+        const previous = prev.get(row.participant.id) ?? null;
+        next.set(row.participant.id, generateSimulatedMetrics(previous, { initial: true }));
+      });
+      return next;
+    });
+    setLastUpdatedAt(new Date());
+
+    const timer = setInterval(() => {
+      setSimulationData((prev) => {
+        const next = new Map<number, SimulatedMetrics>();
+        filteredRows.forEach((row) => {
+          const previous = prev.get(row.participant.id) ?? null;
+          next.set(row.participant.id, generateSimulatedMetrics(previous));
+        });
+        return next;
+      });
+      setLastUpdatedAt(new Date());
+    }, SIMULATION_INTERVAL);
+
+    simulationTimerRef.current = timer;
+
+    return () => {
+      clearInterval(timer);
+      simulationTimerRef.current = null;
+    };
+  }, [filteredRows, isSimulating]);
+
+  useEffect(() => {
+    return () => {
+      if (simulationTimerRef.current) {
+        clearInterval(simulationTimerRef.current);
+      }
+    };
+  }, []);
 
   const isTripSelected = Boolean(selectedTrip);
   const isDataLoading = (participantsLoading || latestLoading) && isTripSelected;
@@ -345,6 +478,25 @@ export default function MonitoringPage() {
                 {selectedTrip.title}
               </span>
             ) : null}
+            <div className="flex flex-col items-end gap-1">
+              <button
+                type="button"
+                onClick={isSimulating ? handleStopSimulation : handleStartSimulation}
+                disabled={!selectedTrip || visibleCount === 0}
+                className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold shadow-sm transition focus:outline-none focus:ring-2 focus:ring-primary-200 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 ${
+                  isSimulating
+                    ? 'bg-rose-500 text-white hover:bg-rose-600'
+                    : 'bg-primary-600 text-white hover:bg-primary-700'
+                }`}
+              >
+                {isSimulating ? '데이터 종료' : '데이터 생성'}
+              </button>
+              {isSimulating && lastUpdatedAt && (
+                <span className="text-[11px] font-medium text-rose-500">
+                  최근 업데이트 {lastUpdatedAt.toLocaleTimeString('ko-KR')}
+                </span>
+              )}
+            </div>
             <button className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700">
               <ShieldCheck className="h-4 w-4" />
               비상 매뉴얼 열기
@@ -357,7 +509,13 @@ export default function MonitoringPage() {
             icon={Stethoscope}
             label="전체 상태"
             value={riskLabel[overallLevel]}
-            helper={health?.message ?? '서비스 상태 확인 중'}
+            helper={
+              isSimulating
+                ? lastUpdatedAt
+                  ? `실시간 더미 데이터 · ${lastUpdatedAt.toLocaleTimeString('ko-KR')}`
+                  : '더미 데이터 준비 중'
+                : health?.message ?? '서비스 상태 확인 중'
+            }
             tone={riskTone[overallLevel]}
           />
           <SummaryCard
@@ -384,7 +542,7 @@ export default function MonitoringPage() {
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.8fr_1.2fr]">
+      <section className="grid gap-6 xl:grid-cols-[2fr_0.9fr]">
         <article className="space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -412,7 +570,6 @@ export default function MonitoringPage() {
                   <th className="px-4 py-3 text-left font-semibold">성별</th>
                   <th className="px-4 py-3 text-left font-semibold">생년월일</th>
                   <th className="px-4 py-3 text-left font-semibold">연락처</th>
-                  <th className="px-4 py-3 text-left font-semibold">이메일</th>
                   <th className="px-4 py-3 text-left font-semibold">위험 여부</th>
                   <th className="px-4 py-3 text-left font-semibold">심박수</th>
                   <th className="px-4 py-3 text-left font-semibold">산소포화도</th>
@@ -424,30 +581,36 @@ export default function MonitoringPage() {
                   <>
                     {isDataLoading && (
                       <tr>
-                        <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-500">
+                        <td colSpan={8} className="px-4 py-6 text-center text-sm text-slate-500">
                           데이터를 불러오는 중입니다.
                         </td>
                       </tr>
                     )}
                     {!isDataLoading && sortedRows.length === 0 && (
                       <tr>
-                        <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-500">
+                        <td colSpan={8} className="px-4 py-6 text-center text-sm text-slate-500">
                           조회된 참가자 정보가 없습니다.
                         </td>
                       </tr>
                     )}
                     {sortedRows.map((row) => {
-                      const { participant, snapshot, alerts: participantAlerts, level } = row;
+                      const { participant, snapshot, alerts: participantAlerts, level, simulation } = row;
                       const traveler = participant.traveler;
                       const birthDateValue = traveler.birth_date ? new Date(traveler.birth_date) : null;
                       const birthDate =
                         birthDateValue && !Number.isNaN(birthDateValue.getTime())
                           ? birthDateValue.toLocaleDateString('ko-KR')
                           : '-';
-                      const heartRateValue = snapshot?.health?.heart_rate;
-                      const spo2Value = snapshot?.health?.spo2 ?? null;
+                      const heartRateValue = simulation?.heartRate ?? snapshot?.health?.heart_rate;
+                      const spo2Value = simulation?.spo2 ?? snapshot?.health?.spo2 ?? null;
                       const heartRate = typeof heartRateValue === 'number' ? `${heartRateValue} bpm` : '-';
-                      const spo2 = typeof spo2Value === 'string' && spo2Value.length > 0 ? `${spo2Value}%` : '-';
+                      const spo2 =
+                        typeof spo2Value === 'number'
+                          ? `${spo2Value}%`
+                          : typeof spo2Value === 'string' && spo2Value.length > 0
+                          ? `${spo2Value}%`
+                          : '-';
+                      const alertCount = simulation ? simulation.alerts : participantAlerts.length;
                       return (
                         <tr
                           key={participant.id}
@@ -465,20 +628,19 @@ export default function MonitoringPage() {
                           <td className="px-4 py-3 text-slate-600">{genderLabel(traveler.gender)}</td>
                           <td className="px-4 py-3 text-slate-600">{birthDate}</td>
                           <td className="px-4 py-3 text-slate-600">{traveler.phone}</td>
-                          <td className="px-4 py-3 text-slate-600">{traveler.email}</td>
                           <td className="px-4 py-3">
-                            <RiskBadge level={level} alerts={participantAlerts.length} />
+                            <RiskBadge level={level} alerts={alertCount} />
                           </td>
                           <td className="px-4 py-3 text-slate-700">{heartRate}</td>
                           <td className="px-4 py-3 text-slate-700">{spo2}</td>
-                          <td className="px-4 py-3 text-right text-slate-600">{participantAlerts.length}건</td>
+                          <td className="px-4 py-3 text-right text-slate-600">{alertCount}건</td>
                         </tr>
                       );
                     })}
                   </>
                 ) : (
                   <tr>
-                    <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-500">
+                    <td colSpan={8} className="px-4 py-6 text-center text-sm text-slate-500">
                       {tripsLoading ? '여행 정보를 불러오는 중입니다.' : noGroupMessage}
                     </td>
                   </tr>
