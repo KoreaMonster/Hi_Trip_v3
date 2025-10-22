@@ -17,9 +17,10 @@ DEBUG = True
 ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
-    'diphthongic-unluxuriantly-elle.ngrok-free.dev',
+        '.ngrok-free.dev',
     '18.194.229.54',
     '*',
+'<ngrok-generated-domain>'
 ]
 
 
@@ -73,7 +74,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # CORS 최상단 배치
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -82,29 +83,50 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+CORS_ALLOW_ALL_ORIGINS = True   # 테스트 용, 실서비스는 권장 X
 
-# PostgreSQL 설정
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME', default='hitrip_db'),
-        'USER': config('DB_USER', default='postgres'),
-        'PASSWORD': config('DB_PASSWORD', default=''),
-        'HOST': config('DB_HOST', default='localhost'),
-        'PORT': config('DB_PORT', default='5432'),
-    }
-}
+# # PostgreSQL 설정
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': config('DB_NAME', default='hitrip_db'),
+#         'USER': config('DB_USER', default='postgres'),
+#         'PASSWORD': config('DB_PASSWORD', default=''),
+#         'HOST': config('DB_HOST', default='localhost'),
+#         'PORT': config('DB_PORT', default='5432'),
+#     }
+# }
 
+#
+# # CORS 설정
+# CORS_ALLOWED_ORIGINS = FRONTEND_ORIGINS
+# CORS_ALLOWED_ORIGIN_REGEXES = [
+#     r"^http://(?:10|192\.168)\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}:[0-9]{2,5}$",
+#     r"^http://172\.(?:1[6-9]|2[0-9]|3[0-1])\.[0-9]{1,3}\.[0-9]{1,3}:[0-9]{2,5}$",
+# ]
+
+# CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(FRONTEND_ORIGINS + ["http://localhost:8000"]))
+
+# CSRF_TRUSTED_ORIGINS 설정
+# 'https://.ngrok-free.dev'로 수정하면 모든 ngrok-free.dev 하위 도메인을 신뢰합니다.
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:3000',
+    'http://localhost:8000',
+    'https://.ngrok-free.dev',  # <--- 이 부분 수정
+]
 
 # CORS 설정
-CORS_ALLOWED_ORIGINS = FRONTEND_ORIGINS
+# CORS_ALLOWED_ORIGINS 대신 CORS_ALLOWED_ORIGIN_REGEXES 사용
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+    # ngrok 특정 주소는 여기서 제거하거나 유지해도 됩니다.
+]
+
+# 모든 ngrok-free.dev 하위 도메인을 허용하는 정규식 추가
 CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^http://(?:10|192\.168)\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}:[0-9]{2,5}$",
-    r"^http://172\.(?:1[6-9]|2[0-9]|3[0-1])\.[0-9]{1,3}\.[0-9]{1,3}:[0-9]{2,5}$",
+    r"^https://.*\.ngrok-free\.dev$",  # <--- 이 부분 추가
 ]
 CORS_ALLOW_CREDENTIALS = True  # 🔑 이게 핵심!
-
-CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(FRONTEND_ORIGINS + ["http://localhost:8000"]))
 
 # REST Framework 설정
 REST_FRAMEWORK = {
@@ -193,3 +215,66 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # .env 파일에 GOOGLE_MAPS_API_KEY 값을 추가한 뒤, config 함수가 값을 찾지 못하면
 # 기본값으로 빈 문자열을 반환해 개발 환경에서도 안전하게 동작하도록 합니다.
 GOOGLE_MAPS_API_KEY = config("GOOGLE_MAPS_API_KEY", default="")
+PERPLEXITY_API_KEY = config("PERPLEXITY_API_KEY", default="")
+
+# ============================================
+# AWS 배포 설정 (여기서부터 추가!)
+# ============================================
+import os
+
+# 환경 변수
+ENVIRONMENT = config('ENVIRONMENT', default='production')
+DEBUG = config('DEBUG', default=False, cast=bool)
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-l(i$#zrc*y$ry$5pm&0eef5q$=_7jvfmiy7xz=5h6dpkr7kj7)')
+
+# ALLOWED_HOSTS
+if ENVIRONMENT == 'production':
+    ALLOWED_HOSTS = ['*', '.elasticbeanstalk.com', '.amplifyapp.com',     '.ngrok-free.dev',
+]
+else:
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*',     '.ngrok-free.dev',
+]
+
+# Static files
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# Database 설정 - 환경별로 완전히 분리
+if ENVIRONMENT == 'production':
+    # AWS RDS
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': config('DB_NAME'),
+            'USER': config('DB_USER'),
+            'PASSWORD': config('DB_PASSWORD'),
+            'HOST': config('DB_HOST'),
+            'PORT': config('DB_PORT', default='5432'),
+        }
+    }
+else:
+    # 로컬 PostgreSQL
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': config('DB_NAME', default='hitrip_db'),
+            'USER': config('DB_USER', default='postgres'),
+            'PASSWORD': config('DB_PASSWORD', default='pwd123'),
+            'HOST': config('DB_HOST', default='localhost'),
+            'PORT': config('DB_PORT', default='5432'),
+        }
+    }
+
+# S3 설정 (AWS 배포시에만 사용)
+if ENVIRONMENT == 'production':
+    AWS_ACCESS_KEY_ID = config('AWS_ACCESS_KEY_ID')
+    AWS_SECRET_ACCESS_KEY = config('AWS_SECRET_ACCESS_KEY')
+    AWS_STORAGE_BUCKET_NAME = config('AWS_STORAGE_BUCKET_NAME')
+    AWS_S3_REGION_NAME = config('AWS_S3_REGION_NAME', default='eu-central-1')
+    AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
+
+    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+    MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
+else:
+    MEDIA_URL = '/media/'
+    MEDIA_ROOT = BASE_DIR / 'media'

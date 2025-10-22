@@ -1,0 +1,12 @@
+version: "2"
+authtoken: "33sy9epHx4gtwfl2RYDcnS08aIR_4hsQJwzcwxG99d1wdiEDg"
+
+tunnels:
+  frontend:
+    proto: http
+    addr: 3000
+    host_header: "localhost:3000"  # 이 줄 추가
+  backend:
+    proto: http
+    addr: 8000.
+    host_header: "localhost:8000"  # 이 줄 추가
