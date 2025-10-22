@@ -120,7 +120,7 @@ const normalizeError = async (error: unknown): Promise<Error> => {
     return error;
   }
 
-  return new ApiError('예기치 못한 오류가 발생했습니다.', { body: null, cause: error });
+  return new ApiError('An unexpected error occurred.', { body: null, cause: error });
 };
 
 export const apiRequest = async <T>(callback: () => Promise<T>): Promise<T> => {
