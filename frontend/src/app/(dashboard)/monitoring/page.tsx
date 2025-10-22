@@ -38,10 +38,10 @@ const riskTone: Record<RiskLevel, string> = {
 };
 
 const riskLabel: Record<RiskLevel, string> = {
-  normal: '정상',
-  warning: '주의',
-  critical: '위험',
-  offline: '연결 대기',
+  normal: 'Stable',
+  warning: 'Caution',
+  critical: 'Critical',
+  offline: 'Awaiting signal',
 };
 
 const randomBetween = (min: number, max: number) => Math.random() * (max - min) + min;
@@ -76,7 +76,7 @@ const generateSimulatedMetrics = (
 };
 
 const formatDate = (value?: string | null) => {
-  if (!value) return '미정';
+  if (!value) return 'TBD';
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
     return value;
@@ -85,8 +85,8 @@ const formatDate = (value?: string | null) => {
 };
 
 const formatTripRange = (trip?: Trip | null) => {
-  if (!trip) return '일정 정보 없음';
-  if (!trip.start_date || !trip.end_date) return '일정 미정';
+  if (!trip) return 'No schedule available';
+  if (!trip.start_date || !trip.end_date) return 'Schedule TBD';
   return `${formatDate(trip.start_date)} ~ ${formatDate(trip.end_date)}`;
 };
 
@@ -162,8 +162,8 @@ export default function MonitoringPage() {
   );
   const canSelectTrip = groupedTrips.length > 1;
   const noGroupMessage = isSuperAdmin
-    ? '등록된 여행이 없습니다.'
-    : '담당된 여행이 없습니다.';
+    ? 'No trips have been created yet.'
+    : 'No trips have been assigned yet.';
 
   const alertsQueryEnabled = typeof selectedTripId === 'number';
   const { data: alerts = [], isLoading: alertsLoading } = useMonitoringAlertsQuery(selectedTripId ?? undefined, {
@@ -212,10 +212,10 @@ export default function MonitoringPage() {
       if (!status) {
         return participantAlerts.length > 0 ? 'warning' : 'normal';
       }
-      if (status.includes('critical') || status.includes('danger') || status.includes('위험')) {
+      if (status.includes('critical') || status.includes('danger')) {
         return 'critical';
       }
-      if (status.includes('warning') || status.includes('caution') || status.includes('주의')) {
+      if (status.includes('warning') || status.includes('caution')) {
         return 'warning';
       }
       return participantAlerts.length > 0 ? 'warning' : 'normal';
@@ -370,12 +370,12 @@ export default function MonitoringPage() {
       <section className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">여행 중 그룹</p>
-            <h1 className="mt-1 text-2xl font-bold text-slate-900">진행 중인 여행 리스트</h1>
+            <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">In-trip groups</p>
+            <h1 className="mt-1 text-2xl font-bold text-slate-900">Active trip list</h1>
             <p className="mt-1 text-sm text-slate-500">
               {isSuperAdmin
-                ? '총괄관리자는 모든 여행의 모니터링 상태를 확인할 수 있습니다.'
-                : '담당된 여행을 기준으로 실시간 모니터링 대상을 확인하세요.'}
+                ? 'Super admins can monitor every trip.'
+                : 'See the real-time monitoring targets for the trips assigned to you.'}
             </p>
           </div>
         </div>
@@ -384,18 +384,18 @@ export default function MonitoringPage() {
           <table className="min-w-full divide-y divide-slate-100 text-sm">
             <thead className="bg-[#F7F9FC] text-slate-500">
               <tr>
-                <th className="px-5 py-3 text-left font-semibold">구분</th>
-                <th className="px-5 py-3 text-left font-semibold">고객 수</th>
-                <th className="px-5 py-3 text-left font-semibold">여행명</th>
-                <th className="px-5 py-3 text-left font-semibold">담당자</th>
-                <th className="px-5 py-3 text-left font-semibold">시작일자</th>
+                <th className="px-5 py-3 text-left font-semibold">Order</th>
+                <th className="px-5 py-3 text-left font-semibold">Travelers</th>
+                <th className="px-5 py-3 text-left font-semibold">Trip name</th>
+                <th className="px-5 py-3 text-left font-semibold">Owner</th>
+                <th className="px-5 py-3 text-left font-semibold">Start date</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {tripsLoading && (
                 <tr>
                   <td colSpan={5} className="px-5 py-6 text-center text-sm text-slate-500">
-                    여행 정보를 불러오는 중입니다.
+                    Loading trip information…
                   </td>
                 </tr>
               )}
@@ -418,16 +418,16 @@ export default function MonitoringPage() {
                     aria-selected={isActive}
                   >
                     <td className="px-5 py-4 font-semibold">{order}</td>
-                    <td className="px-5 py-4 font-semibold">{trip.participant_count ?? 0}명</td>
+                    <td className="px-5 py-4 font-semibold">{trip.participant_count ?? 0}</td>
                     <td className="px-5 py-4">
                       <div className="flex flex-col">
                         <span className="font-semibold text-slate-800">{trip.title}</span>
                         <span className="text-xs text-slate-500">
-                          {trip.destination ?? '목적지 미정'} · {formatTripRange(trip)}
+                          {trip.destination ?? 'Destination TBD'} · {formatTripRange(trip)}
                         </span>
                       </div>
                     </td>
-                    <td className="px-5 py-4 text-slate-600">{trip.manager_name ?? '담당자 미지정'}</td>
+                    <td className="px-5 py-4 text-slate-600">{trip.manager_name ?? 'Unassigned'}</td>
                     <td className="px-5 py-4 text-slate-600">{formatDate(trip.start_date)}</td>
                   </tr>
                 );
@@ -440,14 +440,14 @@ export default function MonitoringPage() {
       <section className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">여행 중 관리</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">In-trip operations</p>
             <h1 className="mt-1 text-2xl font-bold text-slate-900">
-              {selectedTrip ? `${selectedTrip.title} 모니터링 센터` : '고객 모니터링 센터'}
+              {selectedTrip ? `${selectedTrip.title} monitoring center` : 'Customer monitoring center'}
             </h1>
             <p className="mt-1 text-sm text-slate-500">
               {selectedTrip
-                ? `${selectedTrip.destination ?? '목적지 미정'} · ${formatTripRange(selectedTrip)}`
-                : '생체 데이터와 경보 내역을 확인하고 위험 상황을 빠르게 대응하세요.'}
+                ? `${selectedTrip.destination ?? 'Destination TBD'} · ${formatTripRange(selectedTrip)}`
+                : 'Review biometric data and alerts to respond quickly to risks.'}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
@@ -489,17 +489,17 @@ export default function MonitoringPage() {
                     : 'bg-primary-600 text-white hover:bg-primary-700'
                 }`}
               >
-                {isSimulating ? '데이터 종료' : '데이터 생성'}
+                {isSimulating ? 'Stop data stream' : 'Start data stream'}
               </button>
               {isSimulating && lastUpdatedAt && (
                 <span className="text-[11px] font-medium text-rose-500">
-                  최근 업데이트 {lastUpdatedAt.toLocaleTimeString('ko-KR')}
+                  Last updated {lastUpdatedAt.toLocaleTimeString('en-US')}
                 </span>
               )}
             </div>
             <button className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700">
               <ShieldCheck className="h-4 w-4" />
-              비상 매뉴얼 열기
+              Open emergency manual
             </button>
           </div>
         </div>
@@ -507,36 +507,36 @@ export default function MonitoringPage() {
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <SummaryCard
             icon={Stethoscope}
-            label="전체 상태"
+            label="Overall status"
             value={riskLabel[overallLevel]}
             helper={
               isSimulating
                 ? lastUpdatedAt
-                  ? `실시간 더미 데이터 · ${lastUpdatedAt.toLocaleTimeString('ko-KR')}`
-                  : '더미 데이터 준비 중'
-                : health?.message ?? '서비스 상태 확인 중'
+                  ? `Live sample data · ${lastUpdatedAt.toLocaleTimeString('en-US')}`
+                  : 'Preparing sample data'
+                : health?.message ?? 'Checking service status'
             }
             tone={riskTone[overallLevel]}
           />
           <SummaryCard
             icon={AlertTriangle}
-            label="누적 경보"
-            value={`${alerts.length}건`}
-            helper={alerts[0] ? `${alerts[0].traveler_name} · ${formatAlertTime(alerts[0].snapshot_time)}` : '최근 경보 없음'}
+            label="Total alerts"
+            value={`${alerts.length}`}
+            helper={alerts[0] ? `${alerts[0].traveler_name} · ${formatAlertTime(alerts[0].snapshot_time)}` : 'No recent alerts'}
             tone={alerts.length > 0 ? riskTone.warning : riskTone.normal}
           />
           <SummaryCard
             icon={HeartPulse}
-            label="위험 고객"
-            value={`${totalCritical}명`}
-            helper={totalWarning > 0 ? `주의 ${totalWarning}명 포함` : '건강 이상 없음'}
+            label="High-risk travelers"
+            value={`${totalCritical}`}
+            helper={totalWarning > 0 ? `Caution ${totalWarning} people included` : 'No health issues detected'}
             tone={totalCritical > 0 ? riskTone.critical : totalWarning > 0 ? riskTone.warning : riskTone.normal}
           />
           <SummaryCard
             icon={MapPin}
-            label="오프라인"
-            value={`${totalOffline}명`}
-            helper="기기 연결 상태를 확인하세요"
+            label="Offline"
+            value={`${totalOffline}`}
+            helper="Check device connectivity"
             tone={totalOffline > 0 ? riskTone.offline : riskTone.normal}
           />
         </div>
@@ -546,8 +546,8 @@ export default function MonitoringPage() {
         <article className="space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">신청자 현황</h2>
-              <p className="text-sm text-slate-500">여행 중 고객 건강 상태와 경보 여부를 한눈에 확인하세요.</p>
+              <h2 className="text-lg font-semibold text-slate-900">Participant overview</h2>
+              <p className="text-sm text-slate-500">Review traveler health data and alert history at a glance.</p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-500 shadow-sm">
@@ -555,7 +555,7 @@ export default function MonitoringPage() {
                 <input
                   value={keyword}
                   onChange={(event) => setKeyword(event.target.value)}
-                  placeholder="이름, 연락처 검색"
+                  placeholder="Search by name or phone number"
                   className="w-40 border-none bg-transparent placeholder:text-slate-400 focus:outline-none"
                 />
               </div>
@@ -566,14 +566,14 @@ export default function MonitoringPage() {
             <table className="min-w-full divide-y divide-slate-100 text-sm">
               <thead className="bg-[#F7F9FC] text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 text-left font-semibold">이름</th>
-                  <th className="px-4 py-3 text-left font-semibold">성별</th>
-                  <th className="px-4 py-3 text-left font-semibold">생년월일</th>
-                  <th className="px-4 py-3 text-left font-semibold">연락처</th>
-                  <th className="px-4 py-3 text-left font-semibold">위험 여부</th>
-                  <th className="px-4 py-3 text-left font-semibold">심박수</th>
-                  <th className="px-4 py-3 text-left font-semibold">산소포화도</th>
-                  <th className="px-4 py-3 text-right font-semibold">경보</th>
+                  <th className="px-4 py-3 text-left font-semibold">Name</th>
+                  <th className="px-4 py-3 text-left font-semibold">Gender</th>
+                  <th className="px-4 py-3 text-left font-semibold">Birth date</th>
+                  <th className="px-4 py-3 text-left font-semibold">Phone</th>
+                  <th className="px-4 py-3 text-left font-semibold">Risk level</th>
+                  <th className="px-4 py-3 text-left font-semibold">Heart rate</th>
+                  <th className="px-4 py-3 text-left font-semibold">Oxygen saturation</th>
+                  <th className="px-4 py-3 text-right font-semibold">Alerts</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
@@ -582,14 +582,14 @@ export default function MonitoringPage() {
                     {isDataLoading && (
                       <tr>
                         <td colSpan={8} className="px-4 py-6 text-center text-sm text-slate-500">
-                          데이터를 불러오는 중입니다.
+                          Loading data…
                         </td>
                       </tr>
                     )}
                     {!isDataLoading && sortedRows.length === 0 && (
                       <tr>
                         <td colSpan={8} className="px-4 py-6 text-center text-sm text-slate-500">
-                          조회된 참가자 정보가 없습니다.
+                          No participant data found.
                         </td>
                       </tr>
                     )}
@@ -599,7 +599,7 @@ export default function MonitoringPage() {
                       const birthDateValue = traveler.birth_date ? new Date(traveler.birth_date) : null;
                       const birthDate =
                         birthDateValue && !Number.isNaN(birthDateValue.getTime())
-                          ? birthDateValue.toLocaleDateString('ko-KR')
+                          ? birthDateValue.toLocaleDateString('en-US')
                           : '-';
                       const heartRateValue = simulation?.heartRate ?? snapshot?.health?.heart_rate;
                       const spo2Value = simulation?.spo2 ?? snapshot?.health?.spo2 ?? null;
@@ -633,7 +633,7 @@ export default function MonitoringPage() {
                           </td>
                           <td className="px-4 py-3 text-slate-700">{heartRate}</td>
                           <td className="px-4 py-3 text-slate-700">{spo2}</td>
-                          <td className="px-4 py-3 text-right text-slate-600">{alertCount}건</td>
+                          <td className="px-4 py-3 text-right text-slate-600">{alertCount}</td>
                         </tr>
                       );
                     })}
@@ -641,7 +641,7 @@ export default function MonitoringPage() {
                 ) : (
                   <tr>
                     <td colSpan={8} className="px-4 py-6 text-center text-sm text-slate-500">
-                      {tripsLoading ? '여행 정보를 불러오는 중입니다.' : noGroupMessage}
+                      {tripsLoading ? 'Loading trip information…' : noGroupMessage}
                     </td>
                   </tr>
                 )}
@@ -653,20 +653,20 @@ export default function MonitoringPage() {
         <aside className="space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">경보 타임라인</h2>
-              <p className="text-sm text-slate-500">최근 발생한 경보를 확인하고 대응을 기록하세요.</p>
+              <h2 className="text-lg font-semibold text-slate-900">Alert timeline</h2>
+              <p className="text-sm text-slate-500">Review recent alerts and record your response.</p>
             </div>
-            <span className="rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">최근 24시간</span>
+            <span className="rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">Last 24 hours</span>
           </div>
           <div className="space-y-3">
             {alertsLoading && (
               <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                경보 데이터를 불러오는 중입니다.
+                Loading alert data…
               </div>
             )}
             {!alertsLoading && alerts.length === 0 && (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-6 text-center text-sm text-emerald-600">
-                모든 참가자가 안전하게 여행 중입니다.
+                All travelers are currently safe.
               </div>
             )}
             {alerts.map((alert) => (
@@ -680,9 +680,9 @@ export default function MonitoringPage() {
 }
 
 function genderLabel(gender: TripParticipant['traveler']['gender']) {
-  if (gender === 'M') return '남성';
-  if (gender === 'F') return '여성';
-  return '미확인';
+  if (gender === 'M') return 'Male';
+  if (gender === 'F') return 'Female';
+  return 'Unknown';
 }
 
 function formatAlertTime(value: string) {
