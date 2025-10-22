@@ -12,6 +12,8 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 from decouple import config
+from decouple import config
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -205,3 +207,14 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # .env 파일에 GOOGLE_MAPS_API_KEY 값을 추가한 뒤, config 함수가 값을 찾지 못하면
 # 기본값으로 빈 문자열을 반환해 개발 환경에서도 안전하게 동작하도록 합니다.
 GOOGLE_MAPS_API_KEY = config("GOOGLE_MAPS_API_KEY", default="")
+PERPLEXITY_API_KEY = config("PERPLEXITY_API_KEY", default="")
+
+
+ENVIRONMENT = config('ENVIRONMENT', default='production')
+
+# S3 설정 (AWS 배포시에만 사용)
+if ENVIRONMENT == 'production':
+    AWS_ACCESS_KEY_ID = config('AWS_ACCESS_KEY_ID')
+    AWS_SECRET_ACCESS_KEY = config('AWS_SECRET_ACCESS_KEY')
+    AWS_STORAGE_BUCKET_NAME = config('AWS_STORAGE_BUCKET_NAME')
+    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
