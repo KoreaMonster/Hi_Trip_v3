@@ -1,6 +1,3 @@
-+27
--0
-
 # syntax=docker/dockerfile:1
 FROM node:20-alpine AS deps
 WORKDIR /app

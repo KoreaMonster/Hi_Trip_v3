@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+import {FormEvent, JSX, useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import type { DragEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -480,7 +481,15 @@ export default function SchedulesPage() {
   };
 
   useEffect(() => {
-    setForm((prev) => ({ ...prev, day_number: typeof activeTab === 'number' ? activeTab : dayTabs[0] ?? 1 }));
+    const nextDayNumber = typeof activeTab === 'number' ? activeTab : dayTabs[0] ?? 1;
+
+    setForm((prev) => {
+      if (prev.day_number === nextDayNumber) {
+        return prev;
+      }
+
+      return { ...prev, day_number: nextDayNumber };
+    });
   }, [activeTab, dayTabs]);
 
   const formatTripPeriod = (trip: Trip) => {
@@ -1033,7 +1042,7 @@ function ScheduleSummaryCard({
   helper,
   compact = false,
 }: {
-  icon: (props: { className?: string }) => JSX.Element;
+  icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string;
   helper: string;

@@ -21,6 +21,7 @@ import {
 import { postLogout } from '@/lib/api';
 import { ApiError } from '@/lib/http';
 import { useProfileQuery } from '@/lib/queryHooks';
+import type { UserDetail } from '@/types/api';
 import { useUserStore } from '@/stores/useUserStore';
 import LanguageSwitch from '@/components/LanguageSwitch';
 import { useTranslations, type TranslationKey } from '@/lib/i18n';
@@ -33,6 +34,28 @@ interface NavItem {
   group?: 'pre' | 'mid';
   placement?: 'top' | 'bottom';
 }
+const areUsersEqual = (a: UserDetail | null | undefined, b: UserDetail | null | undefined) => {
+  if (!a || !b) {
+    return false;
+  }
+
+  return (
+    a.id === b.id &&
+    a.username === b.username &&
+    a.email === b.email &&
+    a.phone === b.phone &&
+    a.first_name === b.first_name &&
+    a.last_name === b.last_name &&
+    a.first_name_kr === b.first_name_kr &&
+    a.last_name_kr === b.last_name_kr &&
+    a.full_name_kr === b.full_name_kr &&
+    a.full_name_en === b.full_name_en &&
+    a.role === b.role &&
+    a.role_display === b.role_display &&
+    a.is_approved === b.is_approved
+  );
+};
+
 
 const BASE_NAV_ITEMS: NavItem[] = [
   { href: '/', labelKey: 'app.nav.dashboard', icon: LayoutDashboard, placement: 'top' },
@@ -67,12 +90,20 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (profile) {
-      setUser(profile);
-      setAuthError(null);
+useEffect(() => {
+    if (!profile) {
+      return;
     }
-  }, [profile, setUser]);
+
+    setAuthError(null);
+
+    if (areUsersEqual(user, profile)) {
+      return;
+    }
+
+    setUser(profile);
+  }, [profile, setUser, user]);
+
 
   useEffect(() => {
     if (!isProfileError) {
