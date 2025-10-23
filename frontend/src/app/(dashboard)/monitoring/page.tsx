@@ -1,7 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
+import { useCallback, useEffect, useMemo, useState, type ComponentType } from 'react';import {
   AlertTriangle,
   ChevronDown,
   HeartPulse,
@@ -698,13 +697,13 @@ function SummaryCard({
   label,
   value,
   helper,
-  tone,
+  tone = 'bg-slate-500/10 text-slate-600',
 }: {
-  icon: (props: { className?: string }) => JSX.Element;
+  icon: ComponentType<{ className?: string }>;
   label: string;
   value: string;
-  helper: string;
-  tone: string;
+  helper?: string;
+  tone?: string;
 }) {
   return (
     <article className={`rounded-2xl border bg-white p-5 shadow-sm transition hover:shadow-md ${tone}`}>
