@@ -19,6 +19,7 @@ import { createSchedule, rebalanceTripDay } from '@/lib/api';
 import { usePlacesQuery, useSchedulesQuery } from '@/lib/queryHooks';
 import { useScopedTrips } from '@/lib/useScopedTrips';
 import type { Schedule, ScheduleCreate, ScheduleRebalanceRequest, Trip } from '@/types/api';
+import { useTranslations, type TranslationKey } from '@/lib/i18n';
 import { useLocale } from '@/stores/useLocaleStore';
 
 const timeToMinutes = (value: string) => {
@@ -55,22 +56,35 @@ export default function SchedulesPage() {
     isLoading: tripsLoading,
     isSuperAdmin,
   } = useScopedTrips();
+  const t = useTranslations();
   const locale = useLocale();
-  const lt = useCallback((ko: string, en: string) => (locale === 'ko' ? ko : en), [locale]);
+  const formatMessage = useCallback(
+    (key: TranslationKey, replacements?: Record<string, string | number>) => {
+      let message = t(key);
+      if (replacements) {
+        Object.entries(replacements).forEach(([name, value]) => {
+          message = message.replaceAll(`{${name}}`, String(value));
+        });
+      }
+      return message;
+    },
+    [t],
+  );
   const minutesToLabel = useCallback(
     (minutes?: number | null) => {
-      if (!minutes) return lt('소요 시간 정보 없음', 'No duration information');
-      const hours = Math.floor((minutes ?? 0) / 60);
-      const mins = (minutes ?? 0) % 60;
+      if (!minutes) return formatMessage('schedules.duration.none');
+      const safeMinutes = minutes ?? 0;
+      const hours = Math.floor(safeMinutes / 60);
+      const mins = safeMinutes % 60;
       if (hours === 0) {
-        return lt(`${mins}분`, `${mins} min`);
+        return formatMessage('schedules.duration.minutes', { value: mins });
       }
       if (mins === 0) {
-        return lt(`${hours}시간`, `${hours} hr`);
+        return formatMessage('schedules.duration.hours', { value: hours });
       }
-      return lt(`${hours}시간 ${mins}분`, `${hours} hr ${mins} min`);
+      return formatMessage('schedules.duration.hoursMinutes', { hours, minutes: mins });
     },
-    [lt],
+    [formatMessage],
   );
   const dateLocale = locale === 'ko' ? 'ko-KR' : 'en-US';
   const [selectedTripId, setSelectedTripId] = useState<number | null>(null);
@@ -124,8 +138,8 @@ export default function SchedulesPage() {
   const canSelectTrip = trips.length > 1;
   const canEditSchedule = !isSuperAdmin;
   const noTripMessage = isSuperAdmin
-    ? lt('등록된 여행이 없습니다.', 'No trips have been registered yet.')
-    : lt('담당된 여행이 없습니다.', 'No trips have been assigned to you yet.');
+    ? formatMessage('schedules.noTrips.superAdmin')
+    : formatMessage('schedules.noTrips.assignee');
 
   const filteredTrips = useMemo(() => {
     const keyword = tripFilter.trim().toLowerCase();
@@ -141,7 +155,7 @@ export default function SchedulesPage() {
 
   const filterActive = tripFilter.trim().length > 0;
   const emptyTripMessage = filterActive
-    ? lt('조건에 맞는 여행이 없습니다.', 'No trips match the search criteria.')
+    ? formatMessage('schedules.noTrips.filtered')
     : noTripMessage;
 
   const grouped = useMemo(() => {
@@ -196,6 +210,8 @@ export default function SchedulesPage() {
     if (typeof activeTab !== 'number') return [] as Schedule[];
     return grouped.find((item) => item.day === activeTab)?.items ?? [];
   }, [activeTab, grouped]);
+
+  const activeDayNumber = typeof activeTab === 'number' ? activeTab : 1;
 
   useEffect(() => {
     const nextIds = activeDaySchedules.map((schedule) => schedule.id);
@@ -281,7 +297,7 @@ export default function SchedulesPage() {
           },
         });
         setTimelineNotice(
-          successMessage ?? lt('타임라인이 자동으로 정리되었습니다.', 'The timeline has been organized automatically.'),
+          successMessage ?? formatMessage('schedules.timeline.notice.autoOrganized'),
         );
         setLocalScheduleIds(response.schedules.map((schedule) => schedule.id));
         setHasLocalReorder(false);
@@ -289,7 +305,7 @@ export default function SchedulesPage() {
         const message =
           error instanceof Error
             ? error.message
-            : lt('타임라인 재배치 중 오류가 발생했습니다.', 'An error occurred while reordering the timeline.');
+            : formatMessage('schedules.timeline.error.rebalance');
         setTimelineError(message);
         if (fallbackIds) {
           setLocalScheduleIds(fallbackIds);
@@ -298,7 +314,7 @@ export default function SchedulesPage() {
         setDraggingId(null);
       }
     },
-    [selectedTripId, activeTab, rebalanceMutation, localScheduleIds, lt],
+    [selectedTripId, activeTab, rebalanceMutation, localScheduleIds, formatMessage],
   );
 
   const handleDragStart = useCallback(
@@ -353,19 +369,19 @@ export default function SchedulesPage() {
       void commitReorder(
         localScheduleIds,
         fallbackIds,
-        lt('일정 순서를 재배치했습니다.', 'Schedule order has been updated.'),
+        formatMessage('schedules.timeline.notice.orderUpdated'),
       );
     } else {
       setDraggingId(null);
     }
-  }, [canEditSchedule, hasLocalReorder, activeDaySchedules, commitReorder, localScheduleIds, lt]);
+  }, [canEditSchedule, hasLocalReorder, activeDaySchedules, commitReorder, localScheduleIds, formatMessage]);
 
   const createScheduleMutation = useMutation({
     mutationFn: ({ tripId, payload }: { tripId: number; payload: ScheduleCreate }) =>
       createSchedule(tripId, payload),
     onSuccess: async (created, variables) => {
       setForm((prev) => ({ ...initialScheduleForm, day_number: prev.day_number }));
-      setFormSuccess(lt('새 일정이 추가되었습니다.', 'A new schedule has been added.'));
+      setFormSuccess(formatMessage('schedules.timeline.notice.newAdded'));
       setFormError(null);
       setTimelineError(null);
 
@@ -390,13 +406,10 @@ export default function SchedulesPage() {
         await commitReorder(
           sortedIds,
           fallbackIds,
-          lt(
-            '새 일정 시작 시간 기준으로 순서를 정리했습니다.',
-            'Schedules have been ordered by their start time.',
-          ),
+          formatMessage('schedules.timeline.notice.sortedByStart'),
         );
       } else {
-        setTimelineNotice(lt('새 일정을 추가했습니다.', 'A new schedule has been added.'));
+        setTimelineNotice(formatMessage('schedules.timeline.notice.newAdded'));
       }
 
       await queryClient.invalidateQueries({ queryKey: scheduleQueryKey });
@@ -405,7 +418,7 @@ export default function SchedulesPage() {
       const message =
         error instanceof Error
           ? error.message
-          : lt('일정 생성 중 오류가 발생했습니다.', 'An error occurred while creating the schedule.');
+          : formatMessage('schedules.form.error.generic');
       setFormError(message);
     },
     onSettled: () => {
@@ -428,17 +441,17 @@ export default function SchedulesPage() {
     setFormSuccess(null);
 
     if (!selectedTripId) {
-      setFormError(lt('일정을 추가할 여행을 먼저 선택해 주세요.', 'Select a trip before adding schedules.'));
+      setFormError(formatMessage('schedules.form.validation.selectTrip'));
       return;
     }
 
     if (typeof activeTab !== 'number') {
-      setFormError(lt('일정을 추가할 일차를 선택해 주세요.', 'Choose the trip day for the new schedule.'));
+      setFormError(formatMessage('schedules.form.validation.selectDay'));
       return;
     }
 
     if (!form.main_content.trim() && !form.meeting_point.trim()) {
-      setFormError(lt('일정 내용 또는 집결지를 입력해 주세요.', 'Enter either the schedule details or meeting point.'));
+      setFormError(formatMessage('schedules.form.validation.contentOrMeeting'));
       return;
     }
 
@@ -449,7 +462,7 @@ export default function SchedulesPage() {
     const sameDaySchedules = schedules.filter((schedule) => schedule.day_number === dayNumber);
 
     if (form.budget && Number(form.budget) < 0) {
-      setFormError(lt('예산은 0 이상의 금액으로 입력해 주세요.', 'Budget must be zero or higher.'));
+      setFormError(formatMessage('schedules.form.validation.budget'));
       return;
     }
 
@@ -457,7 +470,7 @@ export default function SchedulesPage() {
     if (form.place_id.trim()) {
       const parsedPlace = Number(form.place_id);
       if (Number.isNaN(parsedPlace)) {
-        setFormError(lt('방문 장소를 올바르게 선택해 주세요.', 'Select a valid place to visit.'));
+        setFormError(formatMessage('schedules.form.validation.place'));
         return;
       }
       placeId = parsedPlace;
@@ -478,9 +491,7 @@ export default function SchedulesPage() {
     });
 
     if (hasOverlap) {
-      const proceed = window.confirm(
-        lt('시간이 겹치는데 생성하시겠습니까?', 'This overlaps with another schedule. Continue?'),
-      );
+      const proceed = window.confirm(formatMessage('schedules.form.confirm.overlap'));
       if (!proceed) {
         return;
       }
@@ -515,27 +526,28 @@ export default function SchedulesPage() {
       const start = new Date(trip.start_date);
       const end = new Date(trip.end_date);
       if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-        return lt('기간 미정', 'Dates TBD');
+        return formatMessage('schedules.trip.periodUnknown');
       }
       const diff = Math.max(0, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
       const startLabel = start.toLocaleDateString(dateLocale);
       const endLabel = end.toLocaleDateString(dateLocale);
-      return lt(
-        `${startLabel} ~ ${endLabel} (${diff + 1}일차)`,
-        `${startLabel} - ${endLabel} (Day ${diff + 1})`,
-      );
+      return formatMessage('schedules.trip.periodLabel', {
+        start: startLabel,
+        end: endLabel,
+        days: diff + 1,
+      });
     },
-    [dateLocale, lt],
+    [dateLocale, formatMessage],
   );
 
   const formatStartDate = useCallback(
     (value?: string | null) => {
-      if (!value) return lt('미정', 'TBD');
+      if (!value) return formatMessage('schedules.common.tbd');
       const parsed = new Date(value);
-      if (Number.isNaN(parsed.getTime())) return lt('미정', 'TBD');
+      if (Number.isNaN(parsed.getTime())) return formatMessage('schedules.common.tbd');
       return parsed.toLocaleDateString(dateLocale);
     },
-    [dateLocale, lt],
+    [dateLocale, formatMessage],
   );
 
   const handleSelectTrip = (tripId: number) => {
@@ -548,16 +560,13 @@ export default function SchedulesPage() {
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">
-              {lt('여행 전 관리', 'Pre-trip management')}
+              {formatMessage('schedules.header.badge')}
             </p>
             <h1 className="mt-1 text-2xl font-bold text-slate-900">
-              {lt('여행 전 관리 리스트', 'Schedule planning overview')}
+              {formatMessage('schedules.header.title')}
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              {lt(
-                '진행 중인 여행 일정을 한눈에 확인하고 관리할 대상을 선택하세요.',
-                'Review all upcoming trip schedules and pick the ones to manage.',
-              )}
+              {formatMessage('schedules.header.subtitle')}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -566,7 +575,7 @@ export default function SchedulesPage() {
               <input
                 value={tripFilter}
                 onChange={(event) => setTripFilter(event.target.value)}
-                placeholder={lt('여행명, 담당자 검색', 'Search trip name or manager')}
+                placeholder={formatMessage('schedules.header.searchPlaceholder')}
                 className="w-40 border-none bg-transparent placeholder:text-slate-400 focus:outline-none"
               />
             </div>
@@ -577,18 +586,18 @@ export default function SchedulesPage() {
           <table className="min-w-full divide-y divide-slate-100 text-sm">
             <thead className="bg-[#F7F9FC] text-slate-500">
               <tr>
-                <th className="px-5 py-3 text-left font-semibold">{lt('구분', 'Category')}</th>
-                <th className="px-5 py-3 text-left font-semibold">{lt('신청인 수', 'Applicants')}</th>
-                <th className="px-5 py-3 text-left font-semibold">{lt('여행명', 'Trip')}</th>
-                <th className="px-5 py-3 text-left font-semibold">{lt('담당자', 'Manager')}</th>
-                <th className="px-5 py-3 text-left font-semibold">{lt('시작일자', 'Start date')}</th>
+                <th className="px-5 py-3 text-left font-semibold">{formatMessage('schedules.table.column.index')}</th>
+                <th className="px-5 py-3 text-left font-semibold">{formatMessage('schedules.table.column.applicants')}</th>
+                <th className="px-5 py-3 text-left font-semibold">{formatMessage('schedules.table.column.trip')}</th>
+                <th className="px-5 py-3 text-left font-semibold">{formatMessage('schedules.table.column.manager')}</th>
+                <th className="px-5 py-3 text-left font-semibold">{formatMessage('schedules.table.column.startDate')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {tripsLoading && (
                 <tr>
                   <td colSpan={5} className="px-5 py-6 text-center text-sm text-slate-500">
-                    {lt('여행 정보를 불러오는 중입니다.', 'Loading trip information.')}
+                    {formatMessage('schedules.table.loadingTrips')}
                   </td>
                 </tr>
               )}
@@ -612,18 +621,18 @@ export default function SchedulesPage() {
                     <td className="px-5 py-3 font-semibold">{index + 1}</td>
                     <td className="px-5 py-3 font-semibold text-slate-700">
                       {trip.participant_count ?? 0}
-                      {lt('명', ' people')}
+                      {formatMessage('schedules.units.peopleSuffix')}
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex flex-col">
                         <span className="text-sm font-semibold text-slate-900">{trip.title}</span>
                         <span className="text-xs text-slate-500">
-                          {trip.destination ?? lt('목적지 미정', 'Destination TBD')} · {formatTripPeriod(trip)}
+                          {trip.destination ?? formatMessage('schedules.trip.destinationUnknown')} · {formatTripPeriod(trip)}
                         </span>
                       </div>
                     </td>
                     <td className="px-5 py-3 text-slate-600">
-                      {trip.manager_name ?? lt('담당자 미지정', 'Manager unassigned')}
+                      {trip.manager_name ?? formatMessage('schedules.trip.managerUnassigned')}
                     </td>
                     <td className="px-5 py-3 text-slate-600">{formatStartDate(trip.start_date)}</td>
                   </tr>
@@ -638,18 +647,15 @@ export default function SchedulesPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">
-              {lt('여행 일정', 'Trip schedule')}
+              {formatMessage('schedules.timeline.badge')}
             </p>
             <h2 className="mt-1 text-xl font-bold text-slate-900">
-              {lt('선택한 여행 타임라인', 'Selected trip timeline')}
+              {formatMessage('schedules.timeline.title')}
             </h2>
             <p className="mt-1 text-sm text-slate-500">
               {canEditSchedule
-                ? lt(
-                    '상세 정보와 일차별 타임라인을 확인하고 새 일정을 등록하세요.',
-                    'Review day-by-day details and register new schedules instantly.',
-                  )
-                : lt('총괄관리자는 모든 여행의 타임라인을 열람할 수 있습니다.', 'Super admins can view timelines for every trip.')}
+                ? formatMessage('schedules.timeline.subtitle.canEdit')
+                : formatMessage('schedules.timeline.subtitle.readOnly')}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
@@ -682,7 +688,7 @@ export default function SchedulesPage() {
             ) : null}
             <button className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600">
               <Route className="h-4 w-4" />
-              {lt('이동 동선 최적화', 'Optimize route')}
+              {formatMessage('schedules.timeline.optimize')}
             </button>
           </div>
         </div>
@@ -697,7 +703,7 @@ export default function SchedulesPage() {
                 : 'border border-slate-200 text-slate-600 hover:border-primary-200 hover:text-primary-600'
             }`}
           >
-            {lt('상세 정보', 'Trip details')}
+            {formatMessage('schedules.timeline.tabs.details')}
           </button>
           {dayTabs.map((day) => {
             const isActive = activeTab === day;
@@ -712,7 +718,7 @@ export default function SchedulesPage() {
                     : 'border border-slate-200 text-slate-600 hover:border-primary-200 hover:text-primary-600'
                 }`}
               >
-                {locale === 'ko' ? `${day}일차` : `Day ${day}`}
+                {formatMessage('schedules.timeline.tabs.dayLabel', { day })}
               </button>
             );
           })}
@@ -726,26 +732,26 @@ export default function SchedulesPage() {
                   <div className="rounded-2xl border border-slate-100 bg-[#F7F9FC] p-5">
                     <div className="flex items-center gap-3">
                       <Info className="h-5 w-5 text-primary-500" />
-                      <h3 className="text-base font-semibold text-slate-900">{lt('여행 정보', 'Trip information')}</h3>
+                      <h3 className="text-base font-semibold text-slate-900">{formatMessage('schedules.details.tripInfo.title')}</h3>
                     </div>
                     <dl className="mt-4 space-y-2 text-sm text-slate-600">
                       <div className="flex justify-between">
-                        <dt className="font-medium text-slate-500">{lt('여행지', 'Destination')}</dt>
+                        <dt className="font-medium text-slate-500">{formatMessage('schedules.details.tripInfo.destination')}</dt>
                         <dd className="font-semibold text-slate-900">{currentTrip.destination}</dd>
                       </div>
                       <div className="flex justify-between">
-                        <dt className="font-medium text-slate-500">{lt('기간', 'Period')}</dt>
+                        <dt className="font-medium text-slate-500">{formatMessage('schedules.details.tripInfo.period')}</dt>
                         <dd>{formatTripPeriod(currentTrip)}</dd>
                       </div>
                       <div className="flex justify-between">
-                        <dt className="font-medium text-slate-500">{lt('담당자', 'Manager')}</dt>
-                        <dd>{currentTrip.manager_name ?? lt('배정 대기', 'Pending assignment')}</dd>
+                        <dt className="font-medium text-slate-500">{formatMessage('schedules.details.tripInfo.manager')}</dt>
+                        <dd>{currentTrip.manager_name ?? formatMessage('schedules.details.tripInfo.managerPending')}</dd>
                       </div>
                       <div className="flex justify-between">
-                        <dt className="font-medium text-slate-500">{lt('참가자', 'Participants')}</dt>
+                        <dt className="font-medium text-slate-500">{formatMessage('schedules.details.tripInfo.participants')}</dt>
                         <dd>
                           {currentTrip.participant_count ?? 0}
-                          {lt('명', ' people')}
+                          {formatMessage('schedules.units.peopleSuffix')}
                         </dd>
                       </div>
                     </dl>
@@ -753,20 +759,15 @@ export default function SchedulesPage() {
                   <div className="rounded-2xl border border-slate-100 bg-[#F7F9FC] p-5">
                     <div className="flex items-center gap-3">
                       <ListChecks className="h-5 w-5 text-primary-500" />
-                      <h3 className="text-base font-semibold text-slate-900">{lt('운영 메모', 'Operations note')}</h3>
+                      <h3 className="text-base font-semibold text-slate-900">{formatMessage('schedules.details.notes.title')}</h3>
                     </div>
-                    <p className="mt-4 text-sm text-slate-600">
-                      {lt(
-                        '일정 등록 현황과 소요 시간을 확인해 운영팀과 공유하세요. 필요 시 담당자와 실시간으로 조율할 수 있습니다.',
-                        'Review registered schedules and total duration to share with the operations team. Coordinate with managers in real time when needed.',
-                      )}
-                    </p>
+                    <p className="mt-4 text-sm text-slate-600">{formatMessage('schedules.details.notes.body')}</p>
                   </div>
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center text-sm text-slate-500">
                   {tripsLoading
-                    ? lt('여행 정보를 불러오는 중입니다.', 'Loading trip information.')
+                    ? formatMessage('schedules.table.loadingTrips')
                     : noTripMessage}
                 </div>
               )}
@@ -774,37 +775,36 @@ export default function SchedulesPage() {
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <ScheduleSummaryCard
                   icon={CalendarClock}
-                  label={lt('등록 일정', 'Registered schedules')}
-                  value={`${schedules.length}${lt('건', ' items')}`}
-                  helper={lt('선택한 여행의 전체 일정', 'All schedules for the selected trip')}
+                  label={formatMessage('schedules.summary.registered.label')}
+                  value={`${schedules.length}${formatMessage('schedules.units.itemSuffix')}`}
+                  helper={formatMessage('schedules.summary.registered.helper')}
                 />
                 <ScheduleSummaryCard
                   icon={Clock8}
-                  label={lt('예상 소요', 'Estimated duration')}
+                  label={formatMessage('schedules.summary.duration.label')}
                   value={minutesToLabel(totalMinutes)}
-                  helper={lt('전체 체류 시간', 'Total stay time')}
+                  helper={formatMessage('schedules.summary.duration.helper')}
                 />
                 <ScheduleSummaryCard
                   icon={MapPin}
-                  label={lt('운영 일수', 'Operating days')}
-                  value={locale === 'ko' ? `${dayTabs.length}일차` : `${dayTabs.length} days`}
-                  helper={lt('여행 진행 일수', 'Days in operation')}
+                  label={formatMessage('schedules.summary.days.label')}
+                  value={formatMessage('schedules.summary.days.value', { count: dayTabs.length })}
+                  helper={formatMessage('schedules.summary.days.helper')}
                 />
                 <ScheduleSummaryCard
                   icon={Route}
-                  label={lt('다가오는 일정', 'Upcoming schedule')}
+                  label={formatMessage('schedules.summary.upcoming.label')}
                   value={
                     upcoming.length > 0
-                      ? upcoming[0].main_content ?? upcoming[0].place_name ?? lt('세부 일정 미정', 'Details TBD')
-                      : lt('일정 미정', 'No schedule planned')
+                      ? upcoming[0].main_content ?? upcoming[0].place_name ?? formatMessage('schedules.common.detailUnknown')
+                      : formatMessage('schedules.summary.upcoming.empty')
                   }
                   helper={
                     upcoming[0]
-                      ? lt(
-                          `${upcoming[0].start_time.slice(0, 5)} 시작`,
-                          `Starts at ${upcoming[0].start_time.slice(0, 5)}`,
-                        )
-                      : lt('최신 업데이트 없음', 'No recent updates')
+                      ? formatMessage('schedules.summary.upcoming.startAt', {
+                          time: upcoming[0].start_time.slice(0, 5),
+                        })
+                      : formatMessage('schedules.summary.upcoming.noUpdates')
                   }
                   compact
                 />
@@ -814,26 +814,23 @@ export default function SchedulesPage() {
             <div className="space-y-6">
               {isLoading ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center text-sm text-slate-500">
-                  {lt('일정을 불러오는 중입니다.', 'Loading schedules...')}
+                  {formatMessage('schedules.timeline.loading')}
                 </div>
               ) : (
                 <>
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div>
                       <h3 className="text-lg font-semibold text-slate-900">
-                        {locale === 'ko' ? `${activeTab}일차 타임라인` : `Day ${activeTab} timeline`}
+                        {formatMessage('schedules.timeline.heading', { day: activeDayNumber })}
                       </h3>
                       {canEditSchedule && (
                         <p className="text-xs text-slate-500">
-                          {lt(
-                            '일정을 드래그하면 백엔드에서 자동으로 순서와 시간이 재배치됩니다.',
-                            'Drag and drop schedules to automatically reorder them on the backend.',
-                          )}
+                          {formatMessage('schedules.timeline.dragHint')}
                         </p>
                       )}
                     </div>
                     <span className="inline-flex items-center rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600">
-                      {lt('총 소요', 'Total duration')} {minutesToLabel(activeDayDuration)}
+                      {formatMessage('schedules.timeline.totalDuration')} {minutesToLabel(activeDayDuration)}
                     </span>
                   </div>
                   <div className="grid gap-6 xl:grid-cols-3">
@@ -848,7 +845,7 @@ export default function SchedulesPage() {
                         >
                           {timelineError ??
                             (rebalanceMutation.isPending
-                              ? lt('타임라인을 재배치하는 중입니다...', 'Reordering the timeline...')
+                              ? formatMessage('schedules.timeline.rebalancing')
                               : timelineNotice)}
                         </div>
                       )}
@@ -856,12 +853,12 @@ export default function SchedulesPage() {
                         <table className="min-w-full divide-y divide-slate-100 text-sm">
                           <thead className="bg-[#F7F9FC] text-slate-500">
                             <tr>
-                              <th className="px-5 py-3 text-left font-semibold">{lt('시간', 'Time')}</th>
-                              <th className="px-5 py-3 text-left font-semibold">{lt('일정 내용', 'Schedule detail')}</th>
-                              <th className="px-5 py-3 text-left font-semibold">{lt('집결지', 'Meeting point')}</th>
-                              <th className="px-5 py-3 text-left font-semibold">{lt('이동 수단', 'Transport')}</th>
-                              <th className="px-5 py-3 text-right font-semibold">{lt('예산', 'Budget')}</th>
-                              <th className="px-5 py-3 text-right font-semibold">{lt('상세', 'Details')}</th>
+                              <th className="px-5 py-3 text-left font-semibold">{formatMessage('schedules.timeline.table.time')}</th>
+                              <th className="px-5 py-3 text-left font-semibold">{formatMessage('schedules.timeline.table.detail')}</th>
+                              <th className="px-5 py-3 text-left font-semibold">{formatMessage('schedules.timeline.table.meeting')}</th>
+                              <th className="px-5 py-3 text-left font-semibold">{formatMessage('schedules.timeline.table.transport')}</th>
+                              <th className="px-5 py-3 text-right font-semibold">{formatMessage('schedules.timeline.table.budget')}</th>
+                              <th className="px-5 py-3 text-right font-semibold">{formatMessage('schedules.timeline.table.details')}</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 bg-white">
@@ -869,14 +866,8 @@ export default function SchedulesPage() {
                               <tr>
                                 <td colSpan={6} className="px-5 py-6 text-center text-sm text-slate-500">
                                   {canEditSchedule
-                                    ? lt(
-                                        '아직 등록된 일정이 없습니다. 오른쪽에서 일정을 추가해 보세요.',
-                                        'No schedules yet. Add one from the panel on the right.',
-                                      )
-                                    : lt(
-                                        '아직 등록된 일정이 없습니다. 담당자에게 등록을 요청해 주세요.',
-                                        'No schedules yet. Ask the assigned manager to add them.',
-                                      )}
+                                    ? formatMessage('schedules.timeline.empty.canEdit')
+                                    : formatMessage('schedules.timeline.empty.readOnly')}
                                 </td>
                               </tr>
                             )}
@@ -906,15 +897,15 @@ export default function SchedulesPage() {
                                 </td>
                                 <td className="px-5 py-3 text-slate-700">
                                   <div className="font-semibold text-slate-900">
-                                    {schedule.main_content ?? schedule.place_name ?? lt('세부 일정 미정', 'Details TBD')}
+                                    {schedule.main_content ?? schedule.place_name ?? formatMessage('schedules.common.detailUnknown')}
                                   </div>
                                   <div className="text-xs text-slate-500">#{String(index + 1).padStart(2, '0')}</div>
                                 </td>
-                                <td className="px-5 py-3 text-slate-600">{schedule.meeting_point ?? lt('집결지 미정', 'Meeting point TBD')}</td>
-                                <td className="px-5 py-3 text-slate-600">{schedule.transport ?? lt('미정', 'TBD')}</td>
+                                <td className="px-5 py-3 text-slate-600">{schedule.meeting_point ?? formatMessage('schedules.common.meetingUnknown')}</td>
+                                <td className="px-5 py-3 text-slate-600">{schedule.transport ?? formatMessage('schedules.common.tbd')}</td>
                                 <td className="px-5 py-3 text-right text-slate-700">
                                   {schedule.budget
-                                    ? `${schedule.budget.toLocaleString()}${lt('원', ' KRW')}`
+                                    ? `${schedule.budget.toLocaleString()}${formatMessage('schedules.units.wonSuffix')}`
                                     : '-'}
                                 </td>
                                 <td className="px-5 py-3 text-right">
@@ -923,11 +914,11 @@ export default function SchedulesPage() {
                                       href={detailHref}
                                       className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-primary-200 hover:text-primary-600"
                                     >
-                                      {lt('상세 보기', 'View details')}
+                                      {formatMessage('schedules.timeline.table.viewDetails')}
                                       <ArrowUpRight className="h-3.5 w-3.5" />
                                     </Link>
                                   ) : (
-                                    <span className="text-xs text-slate-400">{lt('연결된 장소 없음', 'No linked place')}</span>
+                                    <span className="text-xs text-slate-400">{formatMessage('schedules.timeline.table.noPlace')}</span>
                                   )}
                                 </td>
                                 </tr>
@@ -942,11 +933,9 @@ export default function SchedulesPage() {
                       <div className="rounded-2xl border border-slate-100 bg-[#F9FBFF] p-5">
                         <div className="mb-4 flex items-center justify-between">
                           <div>
-                            <h4 className="text-base font-semibold text-slate-900">{lt('새 일정 추가', 'Add a new schedule')}</h4>
+                            <h4 className="text-base font-semibold text-slate-900">{formatMessage('schedules.form.title')}</h4>
                             <p className="text-sm text-slate-500">
-                              {locale === 'ko'
-                                ? `${activeTab}일차에 필요한 일정을 즉시 등록하세요.`
-                                : `Register what you need for Day ${activeTab} right away.`}
+                              {formatMessage('schedules.form.subtitle', { day: activeDayNumber })}
                             </p>
                           </div>
                           {formSuccess && (
@@ -966,7 +955,7 @@ export default function SchedulesPage() {
                           <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-2">
                               <label htmlFor="schedule-start" className="text-sm font-semibold text-slate-700">
-                                {lt('시작 시간', 'Start time')}
+                                {formatMessage('schedules.form.startTime')}
                               </label>
                               <input
                                 id="schedule-start"
@@ -979,7 +968,7 @@ export default function SchedulesPage() {
                             </div>
                             <div className="space-y-2">
                               <label htmlFor="schedule-end" className="text-sm font-semibold text-slate-700">
-                                {lt('종료 시간', 'End time')}
+                                {formatMessage('schedules.form.endTime')}
                               </label>
                               <input
                                 id="schedule-end"
@@ -994,7 +983,7 @@ export default function SchedulesPage() {
 
                           <div className="space-y-2">
                             <label htmlFor="schedule-content" className="text-sm font-semibold text-slate-700">
-                              {lt('주요 활동', 'Key activity')}
+                              {formatMessage('schedules.form.activity.label')}
                             </label>
                             <input
                               id="schedule-content"
@@ -1002,21 +991,21 @@ export default function SchedulesPage() {
                               value={form.main_content}
                               onChange={(event) => handleFormChange('main_content')(event.target.value)}
                               className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
-                              placeholder={lt('예: 문화 체험 프로그램', 'e.g., cultural program')}
+                              placeholder={formatMessage('schedules.form.examples.activity')}
                             />
                           </div>
 
                           <div className="space-y-2">
                             <label htmlFor="schedule-place" className="text-sm font-semibold text-slate-700">
-                              {lt('방문 장소', 'Place to visit')}
+                              {formatMessage('schedules.form.place.label')}
                             </label>
                             {placesLoading ? (
                               <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-2 text-sm text-slate-500">
-                                {lt('방문 가능 장소를 불러오는 중입니다.', 'Loading available places...')}
+                                {formatMessage('schedules.form.places.loading')}
                               </div>
                             ) : places.length === 0 ? (
                               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-600">
-                                {lt('등록된 장소가 없습니다. 장소 관리에서 먼저 추가해 주세요.', 'No places are registered yet. Add them from place management first.')}
+                                {formatMessage('schedules.form.places.empty')}
                               </div>
                             ) : (
                               <select
@@ -1025,7 +1014,7 @@ export default function SchedulesPage() {
                                 onChange={(event) => handleFormChange('place_id')(event.target.value)}
                                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
                               >
-                                <option value="">{lt('방문 장소 미정', 'Place TBD')}</option>
+                                <option value="">{formatMessage('schedules.form.place.placeholderOption')}</option>
                                 {places.map((place) => (
                                   <option key={place.id} value={place.id}>
                                     {place.name}
@@ -1037,7 +1026,7 @@ export default function SchedulesPage() {
 
                           <div className="space-y-2">
                             <label htmlFor="schedule-meeting" className="text-sm font-semibold text-slate-700">
-                              {lt('집결지', 'Meeting point')}
+                              {formatMessage('schedules.form.meeting.label')}
                             </label>
                             <input
                               id="schedule-meeting"
@@ -1045,14 +1034,14 @@ export default function SchedulesPage() {
                               value={form.meeting_point}
                               onChange={(event) => handleFormChange('meeting_point')(event.target.value)}
                               className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
-                              placeholder={lt('예: 호텔 로비', 'e.g., hotel lobby')}
+                              placeholder={formatMessage('schedules.form.examples.meeting')}
                             />
                           </div>
 
                           <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-2">
                               <label htmlFor="schedule-transport" className="text-sm font-semibold text-slate-700">
-                                {lt('이동 수단', 'Transport')}
+                                {formatMessage('schedules.form.transport.label')}
                               </label>
                               <input
                                 id="schedule-transport"
@@ -1060,12 +1049,12 @@ export default function SchedulesPage() {
                                 value={form.transport}
                                 onChange={(event) => handleFormChange('transport')(event.target.value)}
                                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
-                                placeholder={lt('예: 전용 버스', 'e.g., chartered bus')}
+                                placeholder={formatMessage('schedules.form.examples.transport')}
                               />
                             </div>
                             <div className="space-y-2">
                               <label htmlFor="schedule-budget" className="text-sm font-semibold text-slate-700">
-                                {lt('예산 (원)', 'Budget (KRW)')}
+                                {formatMessage('schedules.form.budget.label')}
                               </label>
                               <input
                                 id="schedule-budget"
@@ -1074,7 +1063,7 @@ export default function SchedulesPage() {
                                 value={form.budget}
                                 onChange={(event) => handleFormChange('budget')(event.target.value)}
                                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary-200 focus:outline-none focus:ring-4 focus:ring-primary-100"
-                                placeholder={lt('예: 50000', 'e.g., 50000')}
+                                placeholder={formatMessage('schedules.form.examples.budget')}
                               />
                             </div>
                           </div>
@@ -1092,7 +1081,7 @@ export default function SchedulesPage() {
                               }}
                               className="rounded-full border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:text-primary-600"
                             >
-                              {lt('초기화', 'Reset')}
+                              {formatMessage('schedules.form.reset')}
                             </button>
                             <button
                               type="submit"
@@ -1100,18 +1089,15 @@ export default function SchedulesPage() {
                               className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               {isSubmitting
-                                ? lt('등록 중...', 'Registering...')
-                                : lt('일정 등록', 'Register schedule')}
+                                ? formatMessage('schedules.form.submit.pending')
+                                : formatMessage('schedules.form.submit.default')}
                             </button>
                           </div>
                         </form>
                       </div>
                     ) : (
                       <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-8 text-center text-sm text-slate-500">
-                        {lt(
-                          '총괄관리자는 일정 등록 권한이 없습니다. 담당자 화면에서 여행 일정을 관리합니다.',
-                          'Super admins cannot add schedules. Please manage timelines from the manager view.',
-                        )}
+                        {formatMessage('schedules.form.readOnlyNotice')}
                       </div>
                     )}
                   </div>
