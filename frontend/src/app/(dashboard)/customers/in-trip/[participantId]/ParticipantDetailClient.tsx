@@ -22,7 +22,23 @@ import {
 } from 'recharts';
 
 import { useMonitoringParticipantHistoryQuery, useTripDetailQuery } from '@/lib/queryHooks';
-
+type ExtendedParticipantHistory = {
+  traveler_name: string;
+  traveler_phone?: string;
+  device_serial?: string;
+  emergency_contact?: string;
+  last_updated: string;
+  health: Array<{
+    measured_at: string;
+    heart_rate: number;
+    spo2: string | null;
+  }>;
+  location: Array<{
+    measured_at: string;
+    latitude: string | number;
+    longitude: string | number;
+  }>;
+};
 const formatDateTime = (value?: string | null) => {
   if (!value) return '—';
   const parsed = new Date(value);
@@ -342,21 +358,23 @@ export default function ParticipantDetailClient({
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <dt className="text-xs uppercase tracking-widest text-slate-500">연락처</dt>
               <dd className="mt-2 text-base font-semibold text-slate-900">
-                {(history as any).traveler_phone ?? '미등록'}
+                {(history as ExtendedParticipantHistory).traveler_phone ?? '미등록'}
+
 
               </dd>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <dt className="text-xs uppercase tracking-widest text-slate-500">장치 ID</dt>
               <dd className="mt-2 text-base font-semibold text-slate-900">
-                {(history as any).device_serial ?? '할당 필요'}
+                {(history as ExtendedParticipantHistory).device_serial ?? '할당 필요'}
 
               </dd>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <dt className="text-xs uppercase tracking-widest text-slate-500">비상 연락처</dt>
               <dd className="mt-2 text-base font-semibold text-slate-900">
-                {(history as any).emergency_contact ?? '미등록'}
+                {(history as ExtendedParticipantHistory).emergency_contact ?? '미등록'}
+
 
               </dd>
             </div>
