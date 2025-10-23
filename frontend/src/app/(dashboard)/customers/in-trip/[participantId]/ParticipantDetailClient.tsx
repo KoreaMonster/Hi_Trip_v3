@@ -319,7 +319,7 @@ export default function ParticipantDetailClient({
                 <div>
                   <p className="text-xs uppercase tracking-widest text-slate-500">마지막 위치</p>
                   <p className="text-sm font-semibold text-slate-900">
-                    {latestLocation?.address ?? '위치 정보 없음'}
+                        {latestLocation ? `${Number(latestLocation.latitude).toFixed(6)}, ${Number(latestLocation.longitude).toFixed(6)}` : '위치 정보 없음'}
                   </p>
                 </div>
               </div>
@@ -342,19 +342,22 @@ export default function ParticipantDetailClient({
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <dt className="text-xs uppercase tracking-widest text-slate-500">연락처</dt>
               <dd className="mt-2 text-base font-semibold text-slate-900">
-                {history.traveler_phone ?? '미등록'}
+                {(history as any).traveler_phone ?? '미등록'}
+
               </dd>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <dt className="text-xs uppercase tracking-widest text-slate-500">장치 ID</dt>
               <dd className="mt-2 text-base font-semibold text-slate-900">
-                {history.device_serial ?? '할당 필요'}
+                {(history as any).device_serial ?? '할당 필요'}
+
               </dd>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <dt className="text-xs uppercase tracking-widest text-slate-500">비상 연락처</dt>
               <dd className="mt-2 text-base font-semibold text-slate-900">
-                {history.emergency_contact ?? '미등록'}
+                {(history as any).emergency_contact ?? '미등록'}
+
               </dd>
             </div>
           </dl>
