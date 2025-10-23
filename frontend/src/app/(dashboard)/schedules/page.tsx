@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 
-import {FormEvent, JSX, useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {FormEvent, useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import type { DragEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {

@@ -41,15 +41,16 @@ const toNumber = (value?: string | null): number | null => {
   return parsed;
 };
 
-// 2. 타입을 Next.js에서 import하는 대신, 이렇게 직접 정의합니다.
-interface InTripParticipantPageProps {
+type InTripParticipantPageProps = {
   params: { participantId: string };
-  searchParams: { tripId?: string };
-}
+  searchParams?: { tripId?: string | string[] } | null;
+};
+
 export default function InTripParticipantDetailPage({ params, searchParams }: InTripParticipantPageProps) {
   const router = useRouter();
   const participantId = Number(params.participantId);
-  const tripId = Number(searchParams?.tripId ?? '');
+  const rawTripId = searchParams?.tripId;
+  const tripId = Number(Array.isArray(rawTripId) ? rawTripId[0] : rawTripId ?? '');
   const isTripIdValid = Number.isFinite(tripId);
   const isParticipantIdValid = Number.isFinite(participantId);
 
