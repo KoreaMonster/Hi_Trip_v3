@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ComponentType } from 'react';import {
+import { useCallback, useEffect, useMemo, useState, useRef, type ComponentType } from 'react';
+import {
   AlertTriangle,
   ChevronDown,
   HeartPulse,
