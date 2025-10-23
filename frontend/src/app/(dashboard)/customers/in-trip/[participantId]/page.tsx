@@ -1,18 +1,16 @@
 import ParticipantDetailClient from './ParticipantDetailClient';
 
 type ParticipantPageProps = {
-  params: Promise<{ participantId: string }> | { participantId: string };
-  searchParams?:
-    | Promise<{ tripId?: string | string[] } | null | undefined>
-    | { tripId?: string | string[] } | null;
+  params: Promise<{ participantId: string }>;
+  searchParams?: Promise<{ tripId?: string | string[] } | undefined>;
 };
 
 export default async function InTripParticipantPage({
   params,
   searchParams,
 }: ParticipantPageProps) {
-  const resolvedParams = await Promise.resolve(params);
-  const resolvedSearch = await Promise.resolve(searchParams ?? undefined);
+  const resolvedParams = await params;
+  const resolvedSearch = searchParams ? await searchParams : undefined;
 
   return (
     <ParticipantDetailClient
