@@ -1,9 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ComponentType } from 'react';
 import { ArrowUpRight, CalendarCheck2, ChevronDown, Crown, Mail, PhoneCall, UserRound } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 import { useParticipantsQuery, useSchedulesQuery } from '@/lib/queryHooks';
 import { useScopedTrips } from '@/lib/useScopedTrips';
 import type { Schedule, Trip } from '@/types/api';
@@ -297,8 +296,6 @@ function getUpcomingScheduleCount(trip: Trip, schedules: Schedule[]): number {
   }).length;
 }
 
-import type { ComponentType } from 'react';
-
 function CustomerSummary({
   icon: Icon,
   label,
@@ -306,7 +303,7 @@ function CustomerSummary({
   helper,
   tone = 'bg-slate-500/10 text-slate-600',
 }: {
-  icon: LucideIcon;
+  icon: ComponentType<{ className?: string }>;
   label: string;
   value: string;
   helper: string;
