@@ -19,6 +19,20 @@ export class ApiError extends Error {
 
 const CSRF_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE']);
 
+const sanitizeBaseUrl = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const withoutTrailingSlashes = trimmed.replace(/\/+$/, '');
+  if (withoutTrailingSlashes.toLowerCase().endsWith('/api')) {
+    return withoutTrailingSlashes.slice(0, -4);
+  }
+
+  return withoutTrailingSlashes;
+};
+
 const resolveBaseUrl = (): string => {
   const globalProcess = (globalThis as unknown as {
     process?: { env?: Record<string, string | undefined> };
@@ -26,7 +40,7 @@ const resolveBaseUrl = (): string => {
 
   const envUrl = globalProcess?.env?.NEXT_PUBLIC_API_BASE_URL;
   if (envUrl && envUrl.trim().length > 0) {
-    return envUrl;
+    return sanitizeBaseUrl(envUrl);
   }
 
   if (process.env.NODE_ENV === 'development') {
@@ -36,7 +50,7 @@ const resolveBaseUrl = (): string => {
   return '';
 };
 
-const normalizedBaseUrl = resolveBaseUrl().replace(/\/$/, '');
+const normalizedBaseUrl = sanitizeBaseUrl(resolveBaseUrl());
 
 const readCsrfToken = (): string | null => {
   if (typeof document === 'undefined') {

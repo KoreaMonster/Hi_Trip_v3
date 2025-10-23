@@ -2,14 +2,13 @@
 import ky from 'ky';
 
 // .env.local 예시:
-// NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/
-//   ↑ 마지막에 반드시 슬래시(`/`) 포함!  (…/api/)
-// 백엔드가 /api prefix가 아니라면 그에 맞춰 BASE_URL을 바꿔주세요.
-const RAW_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/';
+// NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+//   ↑ /api 경로는 포함하지 않고, 필요하면 환경 변수에서 직접 조정하세요.
+const RAW_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
 // 안전하게 슬래시 보정
 const ensureTrailingSlash = (s: string) => (s.endsWith('/') ? s : s + '/');
-const API_BASE = ensureTrailingSlash(RAW_BASE);
+const API_BASE = ensureTrailingSlash(RAW_BASE.replace(/\/+$/, ''));
 
 const api = ky.create({
   prefixUrl: API_BASE,
