@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import type { ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import {
@@ -29,7 +30,7 @@ const parseAlternative = (
   try {
     const parsed = JSON.parse(info);
     return typeof parsed === 'object' && parsed ? (parsed as PlaceAlternativeInfo) : null;
-  } catch (error) {
+  } catch {
     return null;
   }
 };
@@ -102,11 +103,14 @@ export default function PlaceDetailPage() {
       <div className="grid gap-6 xl:grid-cols-[1.7fr_1.3fr]">
         <section className="space-y-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           {place.image && (
-            <div className="overflow-hidden rounded-2xl">
-              <img
+            <div className="relative h-64 w-full overflow-hidden rounded-2xl">
+              <Image
                 src={place.image}
                 alt={place.name}
-                className="h-64 w-full object-cover"
+                fill
+                sizes="(min-width: 1280px) 640px, 100vw"
+                className="object-cover"
+                unoptimized
               />
             </div>
           )}

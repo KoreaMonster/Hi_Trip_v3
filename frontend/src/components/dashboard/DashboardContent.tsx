@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo } from 'react';
+import { useCallback, useMemo, type ReactElement } from 'react';
 import {
   useHealthQuery,
   useMonitoringAlertsQuery,
@@ -70,7 +70,7 @@ const monitoringBadgeStyles: Record<MonitoringLevel, string> = {
   unknown: 'border border-slate-200 bg-slate-100 text-slate-500',
 };
 
-const monitoringBadgeIcons: Record<MonitoringLevel, JSX.Element> = {
+const monitoringBadgeIcons: Record<MonitoringLevel, ReactElement> = {
   normal: <ShieldCheck className="h-3.5 w-3.5" />,
   warning: <AlertTriangle className="h-3.5 w-3.5" />,
   critical: <CircleDashed className="h-3.5 w-3.5" />,
@@ -144,12 +144,12 @@ export default function DashboardContent() {
     return `${change > 0 ? '+' : ''}${change}% ${t('dashboard.trend.change.suffix')}`;
   }, [bookingTrendData, t]);
 
-  const buildScheduleStart = (schedule: Schedule): Date | null => {
+  const buildScheduleStart = useCallback((schedule: Schedule): Date | null => {
     if (!activeTrip) return null;
     const base = new Date(`${activeTrip.start_date}T${schedule.start_time}`);
     base.setDate(base.getDate() + (schedule.day_number - 1));
     return base;
-  };
+  }, [activeTrip]);
 
   const todaysSchedules = useMemo(() => {
     if (!schedules || !activeTrip) return [] as Schedule[];
@@ -163,7 +163,7 @@ export default function DashboardContent() {
         start.getDate() === today.getDate()
       );
     });
-  }, [schedules, activeTrip]);
+  }, [schedules, activeTrip, buildScheduleStart]);
 
   const upcomingSchedules = useMemo(() => {
     if (!schedules || !activeTrip) return [] as Schedule[];
@@ -174,7 +174,7 @@ export default function DashboardContent() {
         return startA - startB;
       })
       .slice(0, 5);
-  }, [schedules, activeTrip]);
+  }, [schedules, activeTrip, buildScheduleStart]);
 
   const totalAlerts = monitoringAlerts?.length ?? 0;
 

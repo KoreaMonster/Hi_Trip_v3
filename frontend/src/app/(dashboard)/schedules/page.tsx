@@ -15,6 +15,8 @@ import {
   MapPin,
   Route,
   Search,
+  type LucideIcon,
+
 } from 'lucide-react';
 import { createSchedule, rebalanceTripDay } from '@/lib/api';
 import { usePlacesQuery, useSchedulesQuery } from '@/lib/queryHooks';
@@ -481,16 +483,16 @@ export default function SchedulesPage() {
   };
 
   useEffect(() => {
-    const nextDayNumber = typeof activeTab === 'number' ? activeTab : dayTabs[0] ?? 1;
+        const nextDayNumber = typeof activeTab === 'number' ? activeTab : dayTabs[0] ?? 1;
 
-    setForm((prev) => {
-      if (prev.day_number === nextDayNumber) {
-        return prev;
-      }
+        setForm((prev) => {
+          if (prev.day_number === nextDayNumber) {
+            return prev;
+          }
 
-      return { ...prev, day_number: nextDayNumber };
-    });
-  }, [activeTab, dayTabs]);
+          return { ...prev, day_number: nextDayNumber };
+        });
+      }, [activeTab, dayTabs]);
 
   const formatTripPeriod = (trip: Trip) => {
     const start = new Date(trip.start_date);
@@ -1042,7 +1044,7 @@ function ScheduleSummaryCard({
   helper,
   compact = false,
 }: {
-  icon: React.ComponentType<{ className?: string }>;
+  icon: LucideIcon;
   label: string;
   value: string;
   helper: string;

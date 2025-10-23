@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
+
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import {
   ChevronDown,
@@ -28,7 +30,7 @@ const parseAlternative = (
     try {
       const parsed = JSON.parse(info);
       return typeof parsed === 'object' && parsed ? (parsed as PlaceAlternativeInfo) : null;
-    } catch (error) {
+    } catch {
       return null;
     }
   }
@@ -436,10 +438,13 @@ function PlaceCard({ place, isActive, onSelect }: { place: Place; isActive: bool
     >
       {place.image ? (
         <div className="relative h-40 w-full overflow-hidden">
-          <img
+          <Image
             src={place.image}
             alt={place.name}
-            className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+            fill
+            sizes="(min-width: 1024px) 320px, 100vw"
+            className="object-cover transition duration-500 group-hover:scale-105"
+            unoptimized
           />
         </div>
       ) : (
