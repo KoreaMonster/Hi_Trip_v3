@@ -17,6 +17,11 @@ Backend_Final 5.5 기준, Django/DRF 데모 백엔드입니다. Swagger UI로 AP
 5) 서버 실행: `python manage.py runserver`
 6) Swagger 접속: 브라우저에서 `http://127.0.0.1:8000/api/docs`
 
+## Swagger 파일 공유/오프라인 확인
+- 스키마 파일: `schema.yaml` (repo에 포함). 실행 중인 서버 없이 Swagger UI/Editor에서 열 수 있습니다.
+- Swagger Editor 사용: https://editor.swagger.io → File > Import File → `schema.yaml` 선택.
+- 프론트에서 모킹/클라이언트 생성 시 이 파일을 사용하세요.
+
 ## 데모 계정
 - `demo_admin` / `demo1234` (슈퍼관리자)
 - `demo_manager` / `demo1234` (담당자)
