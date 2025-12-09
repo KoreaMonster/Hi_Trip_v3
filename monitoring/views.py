@@ -1,8 +1,12 @@
 """모니터링 관련 DRF ViewSet 구현."""
 
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    OpenApiTypes,
+    extend_schema,
+    extend_schema_view,
+)
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
@@ -20,10 +24,11 @@ from .serializers import (
     HealthSnapshotSerializer,
     LocationSnapshotSerializer,
 )
-from .services import get_participant_statuses
+from .services import get_participant_statuses, generate_demo_snapshots_for_trip
 
 
 # ✅ 간단한 함수 기반 뷰 (추천)
+@extend_schema(tags=["????"])
 @extend_schema(
     methods=["GET"],
     summary="서비스 헬스 체크",
@@ -83,6 +88,7 @@ class TripMonitoringViewSet(viewsets.ViewSet):
 
         payload = []
         for status_obj in statuses:
+            participant = status_obj.participant
             health_data = (
                 HealthSnapshotSerializer(status_obj.health).data
                 if status_obj.health
@@ -94,11 +100,15 @@ class TripMonitoringViewSet(viewsets.ViewSet):
                 else None
             )
 
-            payload.append({
-                'participant': status_obj.participant,
-                'health': health_data,
-                'location': location_data,
-            })
+            payload.append(
+                {
+                    "participant_id": participant.id,
+                    "traveler_name": participant.traveler.full_name_kr,
+                    "trip_id": participant.trip_id,
+                    "health": health_data,
+                    "location": location_data,
+                }
+            )
 
         serializer = ParticipantLatestSerializer(payload, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -112,6 +122,25 @@ class TripMonitoringViewSet(viewsets.ViewSet):
     @action(detail=True, methods=["get"], url_path="alerts")
     def alerts(self, request, pk=None):
         trip = self.get_trip(pk)
-        alerts = MonitoringAlert.objects.filter(trip=trip).order_by('-created_at')
+        alerts = MonitoringAlert.objects.filter(participant__trip=trip).order_by('-created_at')
         serializer = MonitoringAlertSerializer(alerts, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        summary="데모 건강/위치 스냅샷 생성",
+        description="minutes 동안 interval_seconds 간격으로 더미 건강/위치 스냅샷을 생성하고 경보를 함께 기록합니다.",
+        parameters=[trip_id_parameter],
+        request=DemoGenerationSerializer,
+        responses={200: {"type": "object", "properties": {"created": {"type": "integer"}}}},
+    )
+    @action(detail=True, methods=["post"], url_path="generate-demo")
+    def generate_demo(self, request, pk=None):
+        trip = self.get_trip(pk)
+        serializer = DemoGenerationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        created = generate_demo_snapshots_for_trip(
+            trip=trip,
+            minutes=serializer.validated_data["minutes"],
+            interval_seconds=serializer.validated_data["interval"],
+        )
+        return Response({"created": created}, status=status.HTTP_200_OK)

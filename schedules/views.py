@@ -108,12 +108,12 @@ class PlaceLookupMixin:
 # Schedule ViewSet: 여행별 일정 CRUD + 권한 관리
 # ============================================================================
 @extend_schema_view(
-    list=extend_schema(summary="특정 여행의 일정 목록 조회"),
-    create=extend_schema(summary="특정 여행에 새 일정을 추가"),
-    retrieve=extend_schema(summary="단일 일정 상세 조회"),
-    update=extend_schema(summary="일정 전체 수정"),
-    partial_update=extend_schema(summary="일정 부분 수정"),
-    destroy=extend_schema(summary="일정 삭제"),
+    list=extend_schema(tags=["일정/장소"], summary="특정 여행의 일정 목록 조회"),
+    create=extend_schema(tags=["일정/장소"], summary="특정 여행에 새 일정을 추가"),
+    retrieve=extend_schema(tags=["일정/장소"], summary="단일 일정 상세 조회"),
+    update=extend_schema(tags=["일정/장소"], summary="일정 전체 수정"),
+    partial_update=extend_schema(tags=["일정/장소"], summary="일정 부분 수정"),
+    destroy=extend_schema(tags=["일정/장소"], summary="일정 삭제"),
 )
 class ScheduleViewSet(TripLookupMixin, viewsets.ModelViewSet):
     """Trip 하위의 Schedule을 담당하는 ViewSet.
@@ -391,12 +391,12 @@ class ScheduleViewSet(TripLookupMixin, viewsets.ModelViewSet):
 # Place ViewSet: 장소 CRUD
 # ============================================================================
 @extend_schema_view(
-    list=extend_schema(summary="장소 목록 조회"),
-    create=extend_schema(summary="새 장소 등록"),
-    retrieve=extend_schema(summary="장소 상세 정보"),
-    update=extend_schema(summary="장소 전체 수정"),
-    partial_update=extend_schema(summary="장소 부분 수정"),
-    destroy=extend_schema(summary="장소 삭제"),
+    list=extend_schema(tags=["일정/장소"], summary="장소 목록 조회"),
+    create=extend_schema(tags=["일정/장소"], summary="새 장소 등록"),
+    retrieve=extend_schema(tags=["일정/장소"], summary="장소 상세 정보"),
+    update=extend_schema(tags=["일정/장소"], summary="장소 전체 수정"),
+    partial_update=extend_schema(tags=["일정/장소"], summary="장소 부분 수정"),
+    destroy=extend_schema(tags=["일정/장소"], summary="장소 삭제"),
 )
 class PlaceViewSet(viewsets.ModelViewSet):
     """Place CRUD를 담당하는 ViewSet.

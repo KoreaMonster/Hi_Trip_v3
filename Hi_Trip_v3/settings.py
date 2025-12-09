@@ -15,6 +15,8 @@ from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+DEMO_MODE = config("DEMO_MODE", default=True, cast=bool)
+USE_POSTGRES = config("USE_POSTGRES", default=False, cast=bool)
 
 
 # Quick-start development settings - unsuitable for production
@@ -66,17 +68,24 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# PostgreSQL 설정
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME', default='hitrip_db'),
-        'USER': config('DB_USER', default='postgres'),
-        'PASSWORD': config('DB_PASSWORD', default=''),
-        'HOST': config('DB_HOST', default='localhost'),
-        'PORT': config('DB_PORT', default='5432'),
+if USE_POSTGRES:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": config("DB_NAME", default="hitrip_db"),
+            "USER": config("DB_USER", default="postgres"),
+            "PASSWORD": config("DB_PASSWORD", default=""),
+            "HOST": config("DB_HOST", default="localhost"),
+            "PORT": config("DB_PORT", default="5432"),
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
 # CORS 설정
 CORS_ALLOWED_ORIGINS = [
@@ -93,12 +102,25 @@ REST_FRAMEWORK = {
     ],
 }
 
+if DEMO_MODE:
+    REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"].insert(
+        0, "users.authentication.DemoAuthentication"
+    )
+
 # Swagger 설정
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Hi Trip API',
     'DESCRIPTION': 'Hi Trip MVP API Documentation',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    'TAGS': [
+        {'name': '인증/직원', 'description': '직원 등록, 로그인, 승인, 프로필'},
+        {'name': '여행', 'description': '여행 CRUD 및 담당자 배정'},
+        {'name': '참가자', 'description': '여행 참가자 등록/조회'},
+        {'name': '일정/장소', 'description': '장소, 카테고리, 담당자, 지출, 일정 관리'},
+        {'name': '모니터링', 'description': '참가자 건강/위치 상태 및 알림 조회'},
+        {'name': '헬스체크', 'description': '서비스 상태 확인'},
+    ],
 }
 
 AUTH_USER_MODEL = 'users.User'

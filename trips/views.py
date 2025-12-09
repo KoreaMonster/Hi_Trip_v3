@@ -1,7 +1,7 @@
 """trips 앱의 REST API ViewSet 모음."""
 
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
+from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema, extend_schema_view
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -18,6 +18,14 @@ from .serializers import (
 )
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["여행"]),
+    retrieve=extend_schema(tags=["여행"]),
+    create=extend_schema(tags=["여행"]),
+    update=extend_schema(tags=["여행"]),
+    partial_update=extend_schema(tags=["여행"]),
+    destroy=extend_schema(tags=["여행"]),
+)
 class TripViewSet(viewsets.ModelViewSet):
     """여행 CRUD와 관리자 전용 부가 액션을 담당한다."""
 
@@ -80,6 +88,10 @@ class TripViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(trip).data)
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["참가자"]),
+    create=extend_schema(tags=["참가자"]),
+)
 class TripParticipantViewSet(
     mixins.CreateModelMixin,
     mixins.ListModelMixin,
@@ -164,4 +176,3 @@ class TripParticipantViewSet(
             ).data,
         }
         return Response(data, status=status.HTTP_201_CREATED, headers=headers)
-

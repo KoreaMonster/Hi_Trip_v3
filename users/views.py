@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.contrib.sessions.models import Session
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -12,7 +12,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .permissions import IsApprovedStaff, IsSuperAdminUser
-from .serializers import LoginSerializer, UserDetailSerializer, UserSerialization
 from .serializers import (
     LoginSerializer,
     LogoutResponseSerializer,
@@ -23,6 +22,14 @@ from .serializers import (
 User = get_user_model()
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["인증/직원"]),
+    retrieve=extend_schema(tags=["인증/직원"]),
+    create=extend_schema(tags=["인증/직원"]),
+    update=extend_schema(tags=["인증/직원"]),
+    partial_update=extend_schema(tags=["인증/직원"]),
+    destroy=extend_schema(tags=["인증/직원"]),
+)
 class UserViewSet(viewsets.ModelViewSet):
     """직원(User) 리소스에 대한 CRUD와 승인 기능을 제공하는 ViewSet."""
 
@@ -108,6 +115,7 @@ class UserViewSet(viewsets.ModelViewSet):
         )
 
 
+@extend_schema(tags=["인증/직원"])
 class LoginAPIView(APIView):
     """세션 기반 로그인을 담당하는 APIView."""
 
@@ -155,6 +163,7 @@ class LoginAPIView(APIView):
         login(request, user)
         return Response(UserDetailSerializer(user).data)
 
+@extend_schema(tags=["인증/직원"])
 class LogoutAPIView(APIView):
     """현재 세션을 종료하는 APIView."""
 
@@ -173,6 +182,7 @@ class LogoutAPIView(APIView):
         return Response({"message": "로그아웃되었습니다."})
 
 
+@extend_schema(tags=["인증/직원"])
 class ProfileAPIView(APIView):
     """로그인한 직원의 정보를 반환하는 APIView."""
 
